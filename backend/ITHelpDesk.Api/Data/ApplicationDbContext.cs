@@ -16,6 +16,9 @@ public class ApplicationDbContext
 
     public DbSet<Department> Departments => Set<Department>();
 
+    public DbSet<PasswordResetCode> PasswordResetCodes
+        => Set<PasswordResetCode>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -57,6 +60,31 @@ public class ApplicationDbContext
 
             entity.Property(department => department.Description)
                 .HasMaxLength(255);
+        });
+
+        builder.Entity<PasswordResetCode>(entity =>
+        {
+            entity.ToTable("PasswordResetCodes");
+
+            entity.HasKey(resetCode => resetCode.Id);
+
+            entity.Property(resetCode => resetCode.CodeHash)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            entity.Property(resetCode => resetCode.FailedAttempts)
+                .HasDefaultValue(0);
+
+            entity.HasOne(resetCode => resetCode.User)
+                .WithMany(user => user.PasswordResetCodes)
+                .HasForeignKey(resetCode => resetCode.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(resetCode => new
+            {
+                resetCode.UserId,
+                resetCode.CreatedAtUtc
+            });
         });
     }
 }
