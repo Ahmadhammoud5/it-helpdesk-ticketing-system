@@ -1,15 +1,60 @@
-using ITHelpDesk.Api.Data;
-using ITHelpDesk.Api.Entities;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Text;
+using ITHelpDesk.Api.Data;
+using ITHelpDesk.Api.Entities;
 using ITHelpDesk.Api.Options;
 using ITHelpDesk.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+
 var builder = WebApplication.CreateBuilder(args);
 
+// Password reset configuration
+builder.Services
+    .AddOptions<PasswordResetOptions>()
+    .Bind(
+        builder.Configuration.GetSection(
+            PasswordResetOptions.SectionName))
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.HashKey),
+        "PasswordReset:HashKey is missing.")
+    .Validate(
+        options => options.ExpirationMinutes > 0,
+        "Password reset expiration must be greater than zero.")
+    .Validate(
+        options => options.MaxFailedAttempts > 0,
+        "Maximum failed attempts must be greater than zero.")
+    .ValidateOnStart();
+
+// Email configuration
+builder.Services
+    .AddOptions<EmailOptions>()
+    .Bind(
+        builder.Configuration.GetSection(
+            EmailOptions.SectionName))
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.SmtpHost),
+        "Email:SmtpHost is missing.")
+    .Validate(
+        options => options.SmtpPort > 0,
+        "Email:SmtpPort must be greater than zero.")
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.Username),
+        "Email:Username is missing.")
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.Password),
+        "Email:Password is missing.")
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.FromEmail),
+        "Email:FromEmail is missing.")
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.FromName),
+        "Email:FromName is missing.")
+    .ValidateOnStart();
+
+// Database connection
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
@@ -18,6 +63,7 @@ var connectionString =
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 
+// ASP.NET Core Identity
 builder.Services
     .AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
     {
@@ -36,6 +82,8 @@ builder.Services
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
+
+// JWT configuration
 var jwtSection = builder.Configuration
     .GetSection(JwtOptions.SectionName);
 
@@ -63,8 +111,18 @@ if (string.IsNullOrWhiteSpace(jwtOptions.Key))
         "JWT signing key is missing.");
 }
 
+// Application services
 builder.Services.AddScoped<ITokenService, TokenService>();
 
+builder.Services.AddScoped<
+    IPasswordResetCodeService,
+    PasswordResetCodeService>();
+
+builder.Services.AddScoped<
+    IEmailService,
+    SmtpEmailService>();
+
+// JWT authentication
 builder.Services
     .AddAuthentication(options =>
     {
@@ -104,6 +162,8 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// Seed roles and development administrator
 using (var scope = app.Services.CreateScope())
 {
     var roleManager = scope.ServiceProvider
@@ -121,6 +181,8 @@ using (var scope = app.Services.CreateScope())
             app.Configuration);
     }
 }
+
+// Development OpenAPI endpoint
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
