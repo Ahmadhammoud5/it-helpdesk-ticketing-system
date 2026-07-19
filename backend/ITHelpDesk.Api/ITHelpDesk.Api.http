@@ -1,0 +1,78 @@
+@ITHelpDesk_Api_HostAddress = http://localhost:5193
+@accessToken = PASTE_EMPLOYEE_TOKEN_HERE
+@adminToken = PASTE_ADMIN_TOKEN_HERE
+### Health check
+GET {{ITHelpDesk_Api_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+### Register employee
+POST {{ITHelpDesk_Api_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Ahmad",
+  "lastName": "Hammoud",
+  "email": "ahmad.test@example.com",
+  "phoneNumber": null,
+  "departmentId": null,
+  "password": "StrongPass123!",
+  "confirmPassword": "StrongPass123!"
+}
+
+### Login
+POST http://localhost:5193/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "ahmad.test@example.com",
+  "password": "StrongPass123!"
+}
+### Test protected endpoint without token
+GET http://localhost:5193/api/test/authenticated
+Accept: application/json
+
+
+### Login
+POST http://localhost:5193/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "ahmad.test@example.com",
+  "password": "StrongPass123!"
+}
+### Protected endpoint
+GET http://localhost:5193/api/test/authenticated
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Admin-only endpoint
+GET http://localhost:5193/api/test/admin
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+### Login as Admin
+POST http://localhost:5193/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@ithelpdesk.local",
+  "password": "AdminStrongPass123!"
+}
+### Get Ahmad's account
+GET http://localhost:5193/api/auth/me
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+### Admin changes Ahmad to IT Support Agent
+PUT http://localhost:5193/api/admin/users/1/role
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "role": "ITSupportAgent"
+}
+
+### IT Support endpoint
+GET http://localhost:5193/api/test/support
+Authorization: Bearer {{accessToken}}
+Accept: application/json
