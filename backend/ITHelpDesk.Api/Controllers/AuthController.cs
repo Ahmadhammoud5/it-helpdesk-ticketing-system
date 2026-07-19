@@ -1,13 +1,17 @@
-﻿using ITHelpDesk.Api.Constants;
+﻿using System.Data;
+using System.Security.Claims;
+using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.DTOs.Auth;
 using ITHelpDesk.Api.Entities;
+using ITHelpDesk.Api.Options;
+using ITHelpDesk.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using ITHelpDesk.Api.Services;
-using System.Security.Claims;
+using Microsoft.Extensions.Options;
+
 namespace ITHelpDesk.Api.Controllers;
 
 [ApiController]
@@ -15,19 +19,32 @@ namespace ITHelpDesk.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly ApplicationDbContext _dbContext;
     private readonly SignInManager<ApplicationUser> _signInManager;
+    private readonly ApplicationDbContext _dbContext;
     private readonly ITokenService _tokenService;
+    private readonly IPasswordResetCodeService _passwordResetCodeService;
+    private readonly IEmailService _emailService;
+    private readonly PasswordResetOptions _passwordResetOptions;
+    private readonly ILogger<AuthController> _logger;
+
     public AuthController(
-    UserManager<ApplicationUser> userManager,
-    SignInManager<ApplicationUser> signInManager,
-    ApplicationDbContext dbContext,
-    ITokenService tokenService)
+        UserManager<ApplicationUser> userManager,
+        SignInManager<ApplicationUser> signInManager,
+        ApplicationDbContext dbContext,
+        ITokenService tokenService,
+        IPasswordResetCodeService passwordResetCodeService,
+        IEmailService emailService,
+        IOptions<PasswordResetOptions> passwordResetOptions,
+        ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _dbContext = dbContext;
         _tokenService = tokenService;
+        _passwordResetCodeService = passwordResetCodeService;
+        _emailService = emailService;
+        _passwordResetOptions = passwordResetOptions.Value;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -35,7 +52,9 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<RegisterResponse>> Register(
         RegisterRequest request)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = request.Email
+            .Trim()
+            .ToLowerInvariant();
 
         var existingUser = await _userManager.FindByEmailAsync(
             normalizedEmail);
@@ -59,7 +78,8 @@ public class AuthController : ControllerBase
             {
                 return BadRequest(new
                 {
-                    message = "The selected department does not exist or is inactive."
+                    message =
+                        "The selected department does not exist or is inactive."
                 });
             }
         }
@@ -108,7 +128,8 @@ public class AuthController : ControllerBase
                 StatusCodes.Status500InternalServerError,
                 new
                 {
-                    message = "The account could not be assigned its default role."
+                    message =
+                        "The account could not be assigned its default role."
                 });
         }
 
@@ -125,14 +146,18 @@ public class AuthController : ControllerBase
             StatusCodes.Status201Created,
             response);
     }
+
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login(
-    LoginRequest request)
+        LoginRequest request)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = request.Email
+            .Trim()
+            .ToLowerInvariant();
 
-        var user = await _userManager.FindByEmailAsync(normalizedEmail);
+        var user = await _userManager.FindByEmailAsync(
+            normalizedEmail);
 
         if (user is null)
         {
@@ -187,7 +212,8 @@ public class AuthController : ControllerBase
                 StatusCodes.Status500InternalServerError,
                 new
                 {
-                    message = "Login succeeded, but the account could not be updated."
+                    message =
+                        "Login succeeded, but the account could not be updated."
                 });
         }
 
@@ -205,6 +231,254 @@ public class AuthController : ControllerBase
             Roles = roles.ToArray()
         });
     }
+
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword(
+        ForgotPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        const string responseMessage =
+            "If an account exists for this email, a reset code has been sent.";
+
+        var normalizedEmail = request.Email
+            .Trim()
+            .ToLowerInvariant();
+
+        var user = await _userManager.FindByEmailAsync(
+            normalizedEmail);
+
+        // Always return the same response so registered emails
+        // cannot be discovered by attackers.
+        if (user is null || !user.IsActive)
+        {
+            return Ok(new
+            {
+                message = responseMessage
+            });
+        }
+
+        var now = DateTime.UtcNow;
+
+        // Invalidate all previous unused reset codes.
+        var previousCodes = await _dbContext.PasswordResetCodes
+            .Where(resetCode =>
+                resetCode.UserId == user.Id &&
+                resetCode.UsedAtUtc == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var previousCode in previousCodes)
+        {
+            previousCode.UsedAtUtc = now;
+        }
+
+        var code = _passwordResetCodeService.GenerateCode();
+
+        var passwordResetCode = new PasswordResetCode
+        {
+            UserId = user.Id,
+            CodeHash = _passwordResetCodeService.HashCode(code),
+            ExpiresAtUtc = now.AddMinutes(
+                _passwordResetOptions.ExpirationMinutes),
+            FailedAttempts = 0,
+            UsedAtUtc = null,
+            CreatedAtUtc = now
+        };
+
+        _dbContext.PasswordResetCodes.Add(passwordResetCode);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _emailService.SendPasswordResetCodeAsync(
+                user.Email!,
+                $"{user.FirstName} {user.LastName}",
+                code,
+                _passwordResetOptions.ExpirationMinutes,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Failed to send a password reset email for user {UserId}.",
+                user.Id);
+
+            // A code that was not emailed must not remain usable.
+            passwordResetCode.UsedAtUtc = DateTime.UtcNow;
+
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception updateException)
+            {
+                _logger.LogError(
+                    updateException,
+                    "Failed to invalidate password reset code {ResetCodeId}.",
+                    passwordResetCode.Id);
+            }
+        }
+
+        return Ok(new
+        {
+            message = responseMessage
+        });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(
+        ResetPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        const string invalidCodeMessage =
+            "The reset code is invalid or has expired.";
+
+        var normalizedEmail = request.Email
+            .Trim()
+            .ToLowerInvariant();
+
+        var user = await _userManager.FindByEmailAsync(
+            normalizedEmail);
+
+        if (user is null || !user.IsActive)
+        {
+            return BadRequest(new
+            {
+                message = invalidCodeMessage
+            });
+        }
+
+        await using var transaction =
+            await _dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+
+        var now = DateTime.UtcNow;
+
+        var resetCode = await _dbContext.PasswordResetCodes
+            .Where(code =>
+                code.UserId == user.Id &&
+                code.UsedAtUtc == null)
+            .OrderByDescending(code => code.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (resetCode is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+
+            return BadRequest(new
+            {
+                message = invalidCodeMessage
+            });
+        }
+
+        // Reject and invalidate expired codes.
+        if (resetCode.ExpiresAtUtc <= now)
+        {
+            resetCode.UsedAtUtc = now;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return BadRequest(new
+            {
+                message = invalidCodeMessage
+            });
+        }
+
+        // Reject codes that reached the failed-attempt limit.
+        if (resetCode.FailedAttempts >=
+            _passwordResetOptions.MaxFailedAttempts)
+        {
+            resetCode.UsedAtUtc = now;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return BadRequest(new
+            {
+                message = invalidCodeMessage
+            });
+        }
+
+        var codeIsValid =
+            _passwordResetCodeService.VerifyCode(
+                request.Code,
+                resetCode.CodeHash);
+
+        if (!codeIsValid)
+        {
+            resetCode.FailedAttempts++;
+
+            if (resetCode.FailedAttempts >=
+                _passwordResetOptions.MaxFailedAttempts)
+            {
+                resetCode.UsedAtUtc = now;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return BadRequest(new
+            {
+                message = invalidCodeMessage
+            });
+        }
+
+        var identityToken =
+            await _userManager.GeneratePasswordResetTokenAsync(user);
+
+        var resetResult =
+            await _userManager.ResetPasswordAsync(
+                user,
+                identityToken,
+                request.NewPassword);
+
+        if (!resetResult.Succeeded)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+
+            return BadRequest(new
+            {
+                message = "The password could not be reset.",
+                errors = resetResult.Errors.Select(error =>
+                    new
+                    {
+                        code = error.Code,
+                        description = error.Description
+                    })
+            });
+        }
+
+        // Mark this code and any other unused code as consumed.
+        var activeCodes = await _dbContext.PasswordResetCodes
+            .Where(code =>
+                code.UserId == user.Id &&
+                code.UsedAtUtc == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var activeCode in activeCodes)
+        {
+            activeCode.UsedAtUtc = now;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Password reset successfully."
+        });
+    }
+
     [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> GetCurrentUser()

@@ -17,4 +17,6 @@ public class ApplicationUser : IdentityUser<int>
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
 
     public DateTime? LastLoginDate { get; set; }
+    public ICollection<PasswordResetCode> PasswordResetCodes { get; set; }
+    = new List<PasswordResetCode>();
 }
