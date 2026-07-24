@@ -19,9 +19,22 @@ public class ApplicationDbContext
     public DbSet<PasswordResetCode> PasswordResetCodes
         => Set<PasswordResetCode>();
 
+    public DbSet<Ticket> Tickets => Set<Ticket>();
+
+    public DbSet<Category> Categories => Set<Category>();
+
+    public DbSet<Priority> Priorities => Set<Priority>();
+
+    public DbSet<Status> Statuses => Set<Status>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        // Loads CategoryConfiguration, PriorityConfiguration,
+        // StatusConfiguration and TicketConfiguration.
+        builder.ApplyConfigurationsFromAssembly(
+            typeof(ApplicationDbContext).Assembly);
 
         builder.Entity<ApplicationUser>(entity =>
         {

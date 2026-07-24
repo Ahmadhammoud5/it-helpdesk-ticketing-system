@@ -17,6 +17,15 @@ public class ApplicationUser : IdentityUser<int>
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
 
     public DateTime? LastLoginDate { get; set; }
+
     public ICollection<PasswordResetCode> PasswordResetCodes { get; set; }
-    = new List<PasswordResetCode>();
+        = new List<PasswordResetCode>();
+
+    // Tickets created by this user.
+    public ICollection<Ticket> CreatedTickets { get; set; }
+        = new List<Ticket>();
+
+    // Tickets assigned to this user.
+    public ICollection<Ticket> AssignedTickets { get; set; }
+        = new List<Ticket>();
 }
