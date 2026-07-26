@@ -122,6 +122,14 @@ builder.Services.AddScoped<
     IEmailService,
     SmtpEmailService>();
 
+builder.Services.AddScoped<
+    ITicketCommandService,
+    TicketCommandService>();
+
+builder.Services.AddScoped<
+    ITicketQueryService,
+    TicketQueryService>();
+
 // JWT authentication
 builder.Services
     .AddAuthentication(options =>
