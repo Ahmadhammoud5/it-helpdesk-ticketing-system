@@ -3,6 +3,7 @@ import { Navigate, createBrowserRouter } from 'react-router'
 import ProtectedRoute from '../auth/ProtectedRoute'
 import EmployeeLayout from '../components/layout/EmployeeLayout'
 import LoginPage from '../pages/LoginPage'
+import ForgotPasswordPage from '../pages/ForgotPasswordPage'
 import DashboardPage from '../pages/DashboardPage'
 import CreateTicketPage from '../pages/CreateTicketPage'
 import MyTicketsPage from '../pages/MyTicketsPage'
@@ -17,6 +18,10 @@ const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
   },
   {
     element: (
