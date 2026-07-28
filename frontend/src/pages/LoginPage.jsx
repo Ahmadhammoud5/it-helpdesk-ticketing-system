@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  Link,
   Navigate,
   useLocation,
   useNavigate,
@@ -27,6 +28,7 @@ function LoginPage() {
 
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showAccessHelp, setShowAccessHelp] = useState(false)
 
   const [form, setForm] = useState({
     email: '',
@@ -239,12 +241,12 @@ function LoginPage() {
                   Password
                 </label>
 
-                <button
-                  type="button"
+                <Link
+                  to="/forgot-password"
                   className="text-sm font-semibold text-blue-600 transition hover:text-blue-700"
                 >
                   Forgot password?
-                </button>
+                </Link>
               </div>
 
               <div className="relative">
@@ -315,10 +317,41 @@ function LoginPage() {
           <div className="mt-8 rounded-xl border border-slate-200 bg-white p-4 text-center">
             <p className="text-sm text-slate-500">
               Need account access?{' '}
-              <span className="font-semibold text-slate-700">
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowAccessHelp((current) => !current)
+                }
+                aria-expanded={showAccessHelp}
+                className="font-semibold text-blue-600 transition hover:text-blue-700"
+              >
                 Contact your system administrator.
-              </span>
+              </button>
             </p>
+
+            {showAccessHelp && (
+              <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-left">
+                <p className="text-sm font-semibold text-blue-800">
+                  Requesting an account
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-blue-700">
+                  Contact your company IT administrator and provide
+                  your full name, work email address and department.
+                  Only an authorized administrator can create or
+                  activate a HelpDesk account.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAccessHelp(false)}
+                  className="mt-3 text-sm font-semibold text-blue-700 transition hover:text-blue-900"
+                >
+                  Close
+                </button>
+              </div>
+            )}
           </div>
 
           <p className="mt-8 text-center text-xs text-slate-400 lg:hidden">
