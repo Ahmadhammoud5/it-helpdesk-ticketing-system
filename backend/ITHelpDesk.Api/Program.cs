@@ -130,6 +130,11 @@ builder.Services.AddScoped<
     ITicketQueryService,
     TicketQueryService>();
 
+
+builder.Services.AddScoped<
+    ITicketWorkflowService,
+    TicketWorkflowService>();
+
 // JWT authentication
 builder.Services
     .AddAuthentication(options =>
