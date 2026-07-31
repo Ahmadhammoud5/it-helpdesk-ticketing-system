@@ -27,3 +27,31 @@ export async function updateTicket(ticketId, ticketData) {
 export async function deleteTicket(ticketId) {
   await httpClient.delete(`/tickets/${ticketId}`)
 }
+
+export async function updateTicketStatus(
+  ticketId,
+  statusData,
+) {
+  const response = await httpClient.put(
+    `/tickets/${ticketId}/status`,
+    statusData,
+  )
+
+  return response.data
+}
+
+export async function getTicketTimeline(ticketId) {
+  const response = await httpClient.get(
+    `/tickets/${ticketId}/timeline`,
+  )
+
+  return response.data
+}
+
+export async function getTicketWorkTime(ticketId) {
+  const response = await httpClient.get(
+    `/tickets/${ticketId}/work-time`,
+  )
+
+  return response.data
+}
