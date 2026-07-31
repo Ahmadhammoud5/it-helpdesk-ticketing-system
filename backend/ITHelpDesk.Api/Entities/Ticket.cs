@@ -1,4 +1,4 @@
-﻿namespace ITHelpDesk.Api.Entities;
+namespace ITHelpDesk.Api.Entities;
 
 public class Ticket
 {
@@ -40,5 +40,31 @@ public class Ticket
 
     public DateTime? ClosedDate { get; set; }
 
+    public DateTime? CancelledDate { get; set; }
+
+    // Set whenever the ticket enters In Progress.
+    public DateTime? WorkStartedAtUtc { get; set; }
+
+    // Total actual work time, excluding Open and Pending time.
+    public int AccumulatedWorkMinutes { get; set; }
+
     public bool IsDeleted { get; set; }
+
+    public DateTime? DeletedDate { get; set; }
+
+    public int? DeletedByUserId { get; set; }
+
+    public ApplicationUser? DeletedByUser { get; set; }
+
+    public ICollection<TicketAssignment> Assignments { get; set; }
+        = new List<TicketAssignment>();
+
+    public ICollection<TicketHistory> History { get; set; }
+        = new List<TicketHistory>();
+
+    public ICollection<TicketComment> Comments { get; set; }
+        = new List<TicketComment>();
+
+    public ICollection<ActivityLog> ActivityLogs { get; set; }
+        = new List<ActivityLog>();
 }
