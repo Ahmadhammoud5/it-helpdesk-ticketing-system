@@ -79,12 +79,36 @@ const allowedTransitions = {
   6: [],
 }
 
+function normalizeUtcDateValue(dateValue) {
+  if (typeof dateValue !== 'string') {
+    return dateValue
+  }
+
+  let normalizedValue = dateValue.trim()
+
+  normalizedValue = normalizedValue.replace(
+    /(\.\d{3})\d+/,
+    '$1',
+  )
+
+  const hasTimeZone =
+    /(?:Z|[+-]\d{2}:\d{2})$/i.test(
+      normalizedValue,
+    )
+
+  return hasTimeZone
+    ? normalizedValue
+    : `${normalizedValue}Z`
+}
+
 function formatDate(dateValue) {
   if (!dateValue) {
     return '—'
   }
 
-  const date = new Date(dateValue)
+  const date = new Date(
+    normalizeUtcDateValue(dateValue),
+  )
 
   if (Number.isNaN(date.getTime())) {
     return '—'

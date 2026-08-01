@@ -526,7 +526,7 @@ function DashboardPage() {
 
               <Link
                 to="/tickets/create"
-                className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-blue-700 transition hover:bg-blue-50"
+                className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/20 bg-blue-950 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-900"
               >
                 Create a new ticket
                 <ArrowRight size={16} />
