@@ -1,4 +1,4 @@
-﻿namespace ITHelpDesk.Api.Constants;
+namespace ITHelpDesk.Api.Constants;
 
 public static class TicketStatusIds
 {
@@ -7,4 +7,5 @@ public static class TicketStatusIds
     public const int Pending = 3;
     public const int Resolved = 4;
     public const int Closed = 5;
+    public const int Cancelled = 6;
 }

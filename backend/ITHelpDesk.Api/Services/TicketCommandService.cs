@@ -1,4 +1,4 @@
-﻿using ITHelpDesk.Api.Constants;
+using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.DTOs.Tickets;
 using ITHelpDesk.Api.Entities;
@@ -162,9 +162,67 @@ public sealed class TicketCommandService : ITicketCommandService
                 TicketCommandError.Forbidden);
         }
 
-        // Soft delete preserves ticket history for auditing and reporting.
+        var now = DateTime.UtcNow;
+        var previousWorkMinutes =
+            ticket.AccumulatedWorkMinutes;
+
+        // Stop active working time before deleting the ticket.
+        if (ticket.StatusId == TicketStatusIds.InProgress &&
+            ticket.WorkStartedAtUtc.HasValue)
+        {
+            var sessionMinutes = Math.Max(
+                1,
+                (int)Math.Ceiling(
+                    (now - ticket.WorkStartedAtUtc.Value)
+                    .TotalMinutes));
+
+            ticket.AccumulatedWorkMinutes +=
+                sessionMinutes;
+
+            ticket.WorkStartedAtUtc = null;
+
+            _dbContext.TicketHistory.Add(
+                new TicketHistory
+                {
+                    TicketId = ticket.Id,
+                    ChangedByUserAccountId = userId,
+                    FieldName = "AccumulatedWorkMinutes",
+                    OldValue = previousWorkMinutes.ToString(),
+                    NewValue =
+                        ticket.AccumulatedWorkMinutes.ToString(),
+                    ChangedDate = now
+                });
+        }
+
+        // Soft delete preserves audit and reporting data.
         ticket.IsDeleted = true;
-        ticket.LastUpdatedDate = DateTime.UtcNow;
+        ticket.DeletedDate = now;
+        ticket.DeletedByUserId = userId;
+        ticket.LastUpdatedDate = now;
+
+        _dbContext.TicketHistory.Add(
+            new TicketHistory
+            {
+                TicketId = ticket.Id,
+                ChangedByUserAccountId = userId,
+                FieldName = "IsDeleted",
+                OldValue = "False",
+                NewValue = "True",
+                ChangedDate = now
+            });
+
+        _dbContext.ActivityLogs.Add(
+            new ActivityLog
+            {
+                UserAccountId = userId,
+                TicketId = ticket.Id,
+                ActivityType = "TicketDeleted",
+                Description =
+                    $"Ticket {ticket.ReferenceNumber} was deleted.",
+                EntityType = nameof(Ticket),
+                EntityId = ticket.Id,
+                CreatedDate = now
+            });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -210,7 +268,14 @@ public sealed class TicketCommandService : ITicketCommandService
                 LastUpdatedDate = ticket.LastUpdatedDate,
                 DueDate = ticket.DueDate,
                 ResolvedDate = ticket.ResolvedDate,
-                ClosedDate = ticket.ClosedDate
+                ClosedDate = ticket.ClosedDate,
+                CancelledDate = ticket.CancelledDate,
+                WorkStartedAtUtc = ticket.WorkStartedAtUtc,
+                AccumulatedWorkMinutes =
+                    ticket.AccumulatedWorkMinutes,
+                AccumulatedWorkHours = Math.Round(
+                    ticket.AccumulatedWorkMinutes / 60.0,
+                    2)
             })
             .SingleOrDefaultAsync(cancellationToken);
     }

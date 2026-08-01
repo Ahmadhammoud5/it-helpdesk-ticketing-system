@@ -1,4 +1,4 @@
-﻿using ITHelpDesk.Api.Data;
+using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.DTOs.Lookups;
 using ITHelpDesk.Api.DTOs.Tickets;
 using ITHelpDesk.Api.Entities;
@@ -142,7 +142,14 @@ public sealed class TicketQueryService : ITicketQueryService
             LastUpdatedDate = ticket.LastUpdatedDate,
             DueDate = ticket.DueDate,
             ResolvedDate = ticket.ResolvedDate,
-            ClosedDate = ticket.ClosedDate
+            ClosedDate = ticket.ClosedDate,
+            CancelledDate = ticket.CancelledDate,
+            WorkStartedAtUtc = ticket.WorkStartedAtUtc,
+            AccumulatedWorkMinutes =
+                ticket.AccumulatedWorkMinutes,
+            AccumulatedWorkHours = Math.Round(
+                ticket.AccumulatedWorkMinutes / 60.0,
+                2)
         });
     }
 }

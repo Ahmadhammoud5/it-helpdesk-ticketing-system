@@ -1,4 +1,4 @@
-﻿namespace ITHelpDesk.Api.DTOs.Tickets;
+namespace ITHelpDesk.Api.DTOs.Tickets;
 
 public class TicketResponse
 {
@@ -41,4 +41,12 @@ public class TicketResponse
     public DateTime? ResolvedDate { get; set; }
 
     public DateTime? ClosedDate { get; set; }
+
+    public DateTime? CancelledDate { get; set; }
+
+    public DateTime? WorkStartedAtUtc { get; set; }
+
+    public int AccumulatedWorkMinutes { get; set; }
+
+    public double AccumulatedWorkHours { get; set; }
 }
