@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 
 import {
+  createTicketComment,
   deleteTicket,
   getTicketById,
   getTicketComments,
@@ -232,6 +233,18 @@ function TicketDetailsPage() {
   const [timeline, setTimeline] = useState([])
   const [workTime, setWorkTime] = useState(null)
   const [comments, setComments] = useState([])
+  const [newCommentText, setNewCommentText] =
+    useState('')
+  const [
+    newCommentIsInternal,
+    setNewCommentIsInternal,
+  ] = useState(false)
+  const [submittingComment, setSubmittingComment] =
+    useState(false)
+  const [commentError, setCommentError] =
+    useState('')
+  const [commentSuccess, setCommentSuccess] =
+    useState('')
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -266,6 +279,13 @@ function TicketDetailsPage() {
   const isAdmin = roles.includes('Admin')
   const isManager = roles.includes('Manager')
   const isAgent = roles.includes('ITSupportAgent')
+
+  const canCreateInternalNote =
+    isAdmin || isManager || isAgent
+
+  const isFinalTicket =
+    ticket?.statusName === 'Closed' ||
+    ticket?.statusName === 'Cancelled'
 
   const isOwner =
     ticket &&
@@ -500,6 +520,69 @@ function TicketDetailsPage() {
       )
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleCreateComment(event) {
+    event.preventDefault()
+
+    const commentText = newCommentText.trim()
+
+    setCommentError('')
+    setCommentSuccess('')
+
+    if (isFinalTicket) {
+      setCommentError(
+        'Comments cannot be added to closed or cancelled tickets.',
+      )
+      return
+    }
+
+    if (!commentText) {
+      setCommentError('Comment text is required.')
+      return
+    }
+
+    if (commentText.length > 5000) {
+      setCommentError(
+        'Comment text cannot exceed 5000 characters.',
+      )
+      return
+    }
+
+    const creatingInternalNote =
+      canCreateInternalNote &&
+      newCommentIsInternal
+
+    setSubmittingComment(true)
+
+    try {
+      const createdComment =
+        await createTicketComment(ticketId, {
+          commentText,
+          isInternal: creatingInternalNote,
+        })
+
+      setComments((currentComments) => [
+        ...currentComments,
+        createdComment,
+      ])
+
+      setNewCommentText('')
+      setNewCommentIsInternal(false)
+
+      setCommentSuccess(
+        creatingInternalNote
+          ? 'Internal note added successfully.'
+          : 'Reply posted successfully.',
+      )
+    } catch (requestError) {
+      setCommentError(
+        requestError.response?.data?.message ??
+          'Unable to post the comment. Try again.',
+      )
+    } finally {
+      setSubmittingComment(false)
     }
   }
 
@@ -933,6 +1016,114 @@ function TicketDetailsPage() {
                   ))}
                 </div>
               )}
+
+              <form
+                onSubmit={handleCreateComment}
+                className="border-t border-slate-200 p-5 sm:p-6"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-900">
+                      Add a reply
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      {isFinalTicket
+                        ? 'Comments are disabled because this ticket is closed or cancelled.'
+                        : 'Send a public reply or an authorised internal note.'}
+                    </p>
+                  </div>
+
+                  {canCreateInternalNote &&
+                    !isFinalTicket && (
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={
+                            newCommentIsInternal
+                          }
+                          onChange={(event) => {
+                            setNewCommentIsInternal(
+                              event.target.checked,
+                            )
+                            setCommentError('')
+                            setCommentSuccess('')
+                          }}
+                          disabled={submittingComment}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                        />
+
+                        Internal note
+                      </label>
+                    )}
+                </div>
+
+                <textarea
+                  value={newCommentText}
+                  onChange={(event) => {
+                    setNewCommentText(
+                      event.target.value,
+                    )
+                    setCommentError('')
+                    setCommentSuccess('')
+                  }}
+                  maxLength={5000}
+                  rows={5}
+                  disabled={
+                    isFinalTicket ||
+                    submittingComment
+                  }
+                  placeholder={
+                    isFinalTicket
+                      ? 'Comments are disabled for this ticket.'
+                      : newCommentIsInternal
+                        ? 'Write a private note for support staff...'
+                        : 'Write a public reply...'
+                  }
+                  className="mt-4 w-full resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                />
+
+                <div className="mt-2 flex items-center justify-between gap-4">
+                  <span className="text-xs font-medium text-slate-400">
+                    {newCommentText.length}/5000
+                  </span>
+
+                  <button
+                    type="submit"
+                    disabled={
+                      isFinalTicket ||
+                      submittingComment ||
+                      !newCommentText.trim()
+                    }
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {submittingComment && (
+                      <LoaderCircle
+                        size={16}
+                        className="animate-spin"
+                      />
+                    )}
+
+                    {submittingComment
+                      ? 'Posting...'
+                      : newCommentIsInternal
+                        ? 'Add internal note'
+                        : 'Post reply'}
+                  </button>
+                </div>
+
+                {commentError && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                    {commentError}
+                  </div>
+                )}
+
+                {commentSuccess && (
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                    {commentSuccess}
+                  </div>
+                )}
+              </form>
             </section>
           </div>
 
