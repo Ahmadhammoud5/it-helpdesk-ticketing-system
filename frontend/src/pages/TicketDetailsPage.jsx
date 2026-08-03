@@ -35,6 +35,7 @@ import {
 import {
   deleteTicket,
   getTicketById,
+  getTicketComments,
   getTicketTimeline,
   getTicketWorkTime,
   updateTicketStatus,
@@ -230,6 +231,7 @@ function TicketDetailsPage() {
   const [statuses, setStatuses] = useState([])
   const [timeline, setTimeline] = useState([])
   const [workTime, setWorkTime] = useState(null)
+  const [comments, setComments] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -328,17 +330,20 @@ function TicketDetailsPage() {
         statusData,
         timelineData,
         workTimeData,
+        commentData,
       ] = await Promise.all([
         getTicketById(ticketId),
         getStatuses(),
         getTicketTimeline(ticketId),
         getTicketWorkTime(ticketId),
+        getTicketComments(ticketId),
       ])
 
       setTicket(ticketData)
       setStatuses(statusData)
       setTimeline(timelineData)
       setWorkTime(workTimeData)
+      setComments(commentData)
     } catch (requestError) {
       if (requestError.response?.status === 404) {
         setNotFound(true)
@@ -849,30 +854,85 @@ function TicketDetailsPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
-              <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
-                <h2 className="text-lg font-bold text-slate-900">
-                  Communication
-                </h2>
+              <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-6">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Communication
+                  </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Replies and internal notes are assigned to Hassan’s Week 4 work.
-                </p>
-              </div>
-
-              <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-                  <Info size={25} />
+                  <p className="mt-1 text-sm text-slate-500">
+                    Public replies and authorised internal notes.
+                  </p>
                 </div>
 
-                <h3 className="mt-4 font-bold text-slate-900">
-                  Comments will be added next
-                </h3>
-
-                <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  This area is ready for public replies and authorised
-                  internal notes after the comments API is implemented.
-                </p>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                  {comments.length}{' '}
+                  {comments.length === 1 ? 'comment' : 'comments'}
+                </span>
               </div>
+
+              {comments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                    <Info size={25} />
+                  </div>
+
+                  <h3 className="mt-4 font-bold text-slate-900">
+                    No comments yet
+                  </h3>
+
+                  <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
+                    Ticket communication will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {comments.map((comment) => (
+                    <article
+                      key={comment.id}
+                      className={
+                        comment.isInternal
+                          ? 'bg-amber-50/60 px-5 py-5 sm:px-6'
+                          : 'px-5 py-5 sm:px-6'
+                      }
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                          {comment.userName
+                            ?.trim()
+                            .charAt(0)
+                            .toUpperCase() || '?'}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-slate-900">
+                              {comment.userName}
+                            </p>
+
+                            {comment.isInternal && (
+                              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">
+                                Internal note
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            {formatDate(comment.createdDate)}
+                            {comment.updatedDate
+                              ? ' · Edited'
+                              : ''}
+                          </p>
+
+                          <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
+                            {comment.commentText}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
 
