@@ -33,10 +33,14 @@ import {
 } from 'lucide-react'
 
 import {
+  createTicketComment,
   deleteTicket,
+  deleteTicketComment,
   getTicketById,
+  getTicketComments,
   getTicketTimeline,
   getTicketWorkTime,
+  updateTicketComment,
   updateTicketStatus,
 } from '../api/ticketApi'
 import { getStatuses } from '../api/lookupApi'
@@ -230,6 +234,34 @@ function TicketDetailsPage() {
   const [statuses, setStatuses] = useState([])
   const [timeline, setTimeline] = useState([])
   const [workTime, setWorkTime] = useState(null)
+  const [comments, setComments] = useState([])
+  const [newCommentText, setNewCommentText] =
+    useState('')
+  const [
+    newCommentIsInternal,
+    setNewCommentIsInternal,
+  ] = useState(false)
+  const [submittingComment, setSubmittingComment] =
+    useState(false)
+  const [commentError, setCommentError] =
+    useState('')
+  const [commentSuccess, setCommentSuccess] =
+    useState('')
+
+  const [editingCommentId, setEditingCommentId] =
+    useState(null)
+  const [editCommentText, setEditCommentText] =
+    useState('')
+  const [savingCommentId, setSavingCommentId] =
+    useState(null)
+  const [deletingCommentId, setDeletingCommentId] =
+    useState(null)
+  const [
+    commentActionErrorId,
+    setCommentActionErrorId,
+  ] = useState(null)
+  const [commentActionError, setCommentActionError] =
+    useState('')
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -264,6 +296,13 @@ function TicketDetailsPage() {
   const isAdmin = roles.includes('Admin')
   const isManager = roles.includes('Manager')
   const isAgent = roles.includes('ITSupportAgent')
+
+  const canCreateInternalNote =
+    isAdmin || isManager || isAgent
+
+  const isFinalTicket =
+    ticket?.statusName === 'Closed' ||
+    ticket?.statusName === 'Cancelled'
 
   const isOwner =
     ticket &&
@@ -328,17 +367,20 @@ function TicketDetailsPage() {
         statusData,
         timelineData,
         workTimeData,
+        commentData,
       ] = await Promise.all([
         getTicketById(ticketId),
         getStatuses(),
         getTicketTimeline(ticketId),
         getTicketWorkTime(ticketId),
+        getTicketComments(ticketId),
       ])
 
       setTicket(ticketData)
       setStatuses(statusData)
       setTimeline(timelineData)
       setWorkTime(workTimeData)
+      setComments(commentData)
     } catch (requestError) {
       if (requestError.response?.status === 404) {
         setNotFound(true)
@@ -495,6 +537,183 @@ function TicketDetailsPage() {
       )
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleCreateComment(event) {
+    event.preventDefault()
+
+    const commentText = newCommentText.trim()
+
+    setCommentError('')
+    setCommentSuccess('')
+
+    if (isFinalTicket) {
+      setCommentError(
+        'Comments cannot be added to closed or cancelled tickets.',
+      )
+      return
+    }
+
+    if (!commentText) {
+      setCommentError('Comment text is required.')
+      return
+    }
+
+    if (commentText.length > 5000) {
+      setCommentError(
+        'Comment text cannot exceed 5000 characters.',
+      )
+      return
+    }
+
+    const creatingInternalNote =
+      canCreateInternalNote &&
+      newCommentIsInternal
+
+    setSubmittingComment(true)
+
+    try {
+      const createdComment =
+        await createTicketComment(ticketId, {
+          commentText,
+          isInternal: creatingInternalNote,
+        })
+
+      setComments((currentComments) => [
+        ...currentComments,
+        createdComment,
+      ])
+
+      setNewCommentText('')
+      setNewCommentIsInternal(false)
+
+      setCommentSuccess(
+        creatingInternalNote
+          ? 'Internal note added successfully.'
+          : 'Reply posted successfully.',
+      )
+    } catch (requestError) {
+      setCommentError(
+        requestError.response?.data?.message ??
+          'Unable to post the comment. Try again.',
+      )
+    } finally {
+      setSubmittingComment(false)
+    }
+  }
+
+  function startEditingComment(comment) {
+    setEditingCommentId(comment.id)
+    setEditCommentText(comment.commentText)
+    setCommentActionErrorId(null)
+    setCommentActionError('')
+  }
+
+  function cancelEditingComment() {
+    setEditingCommentId(null)
+    setEditCommentText('')
+    setCommentActionErrorId(null)
+    setCommentActionError('')
+  }
+
+  async function handleUpdateComment(
+    event,
+    commentId,
+  ) {
+    event.preventDefault()
+
+    const commentText = editCommentText.trim()
+
+    setCommentActionErrorId(null)
+    setCommentActionError('')
+
+    if (!commentText) {
+      setCommentActionErrorId(commentId)
+      setCommentActionError(
+        'Comment text is required.',
+      )
+      return
+    }
+
+    if (commentText.length > 5000) {
+      setCommentActionErrorId(commentId)
+      setCommentActionError(
+        'Comment text cannot exceed 5000 characters.',
+      )
+      return
+    }
+
+    setSavingCommentId(commentId)
+
+    try {
+      const updatedComment =
+        await updateTicketComment(
+          ticketId,
+          commentId,
+          {
+            commentText,
+          },
+        )
+
+      setComments((currentComments) =>
+        currentComments.map((comment) =>
+          comment.id === commentId
+            ? updatedComment
+            : comment,
+        ),
+      )
+
+      setEditingCommentId(null)
+      setEditCommentText('')
+    } catch (requestError) {
+      setCommentActionErrorId(commentId)
+      setCommentActionError(
+        requestError.response?.data?.message ??
+          'Unable to update this comment.',
+      )
+    } finally {
+      setSavingCommentId(null)
+    }
+  }
+
+  async function handleDeleteComment(commentId) {
+    const confirmed = window.confirm(
+      'Delete this comment permanently?',
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setCommentActionErrorId(null)
+    setCommentActionError('')
+    setDeletingCommentId(commentId)
+
+    try {
+      await deleteTicketComment(
+        ticketId,
+        commentId,
+      )
+
+      setComments((currentComments) =>
+        currentComments.filter(
+          (comment) => comment.id !== commentId,
+        ),
+      )
+
+      if (editingCommentId === commentId) {
+        setEditingCommentId(null)
+        setEditCommentText('')
+      }
+    } catch (requestError) {
+      setCommentActionErrorId(commentId)
+      setCommentActionError(
+        requestError.response?.data?.message ??
+          'Unable to delete this comment.',
+      )
+    } finally {
+      setDeletingCommentId(null)
     }
   }
 
@@ -849,30 +1068,356 @@ function TicketDetailsPage() {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
-              <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
-                <h2 className="text-lg font-bold text-slate-900">
-                  Communication
-                </h2>
+              <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-6">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Communication
+                  </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Replies and internal notes are assigned to Hassan’s Week 4 work.
-                </p>
-              </div>
-
-              <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-                  <Info size={25} />
+                  <p className="mt-1 text-sm text-slate-500">
+                    Public replies and authorised internal notes.
+                  </p>
                 </div>
 
-                <h3 className="mt-4 font-bold text-slate-900">
-                  Comments will be added next
-                </h3>
-
-                <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  This area is ready for public replies and authorised
-                  internal notes after the comments API is implemented.
-                </p>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                  {comments.length}{' '}
+                  {comments.length === 1 ? 'comment' : 'comments'}
+                </span>
               </div>
+
+              {comments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                    <Info size={25} />
+                  </div>
+
+                  <h3 className="mt-4 font-bold text-slate-900">
+                    No comments yet
+                  </h3>
+
+                  <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
+                    Ticket communication will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {comments.map((comment) => (
+                    <article
+                      key={comment.id}
+                      className={
+                        comment.isInternal
+                          ? 'bg-amber-50/60 px-5 py-5 sm:px-6'
+                          : 'px-5 py-5 sm:px-6'
+                      }
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                          {comment.userName
+                            ?.trim()
+                            .charAt(0)
+                            .toUpperCase() || '?'}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-bold text-slate-900">
+                                  {comment.userName}
+                                </p>
+
+                                {comment.isInternal && (
+                                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">
+                                    Internal note
+                                  </span>
+                                )}
+                              </div>
+
+                              <p className="mt-1 text-xs text-slate-500">
+                                {formatDate(
+                                  comment.createdDate,
+                                )}
+                                {comment.updatedDate
+                                  ? ' · Edited'
+                                  : ''}
+                              </p>
+                            </div>
+
+                            {(comment.canEdit ||
+                              comment.canDelete) && (
+                              <div className="flex shrink-0 items-center gap-2">
+                                {comment.canEdit &&
+                                  !isFinalTicket && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        startEditingComment(
+                                          comment,
+                                        )
+                                      }
+                                      disabled={
+                                        savingCommentId ===
+                                          comment.id ||
+                                        deletingCommentId ===
+                                          comment.id
+                                      }
+                                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <Edit3 size={14} />
+                                      Edit
+                                    </button>
+                                  )}
+
+                                {comment.canDelete && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleDeleteComment(
+                                        comment.id,
+                                      )
+                                    }
+                                    disabled={
+                                      savingCommentId ===
+                                        comment.id ||
+                                      deletingCommentId ===
+                                        comment.id
+                                    }
+                                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {deletingCommentId ===
+                                    comment.id ? (
+                                      <LoaderCircle
+                                        size={14}
+                                        className="animate-spin"
+                                      />
+                                    ) : (
+                                      <Trash2 size={14} />
+                                    )}
+
+                                    {deletingCommentId ===
+                                    comment.id
+                                      ? 'Deleting...'
+                                      : 'Delete'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {editingCommentId ===
+                          comment.id ? (
+                            <form
+                              onSubmit={(event) =>
+                                handleUpdateComment(
+                                  event,
+                                  comment.id,
+                                )
+                              }
+                              className="mt-4"
+                            >
+                              <textarea
+                                value={editCommentText}
+                                onChange={(event) => {
+                                  setEditCommentText(
+                                    event.target.value,
+                                  )
+                                  setCommentActionErrorId(
+                                    null,
+                                  )
+                                  setCommentActionError('')
+                                }}
+                                maxLength={5000}
+                                rows={4}
+                                disabled={
+                                  savingCommentId ===
+                                  comment.id
+                                }
+                                className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                              />
+
+                              <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                                <span className="text-xs font-medium text-slate-400">
+                                  {editCommentText.length}/5000
+                                </span>
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={
+                                      cancelEditingComment
+                                    }
+                                    disabled={
+                                      savingCommentId ===
+                                      comment.id
+                                    }
+                                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    <X size={14} />
+                                    Cancel
+                                  </button>
+
+                                  <button
+                                    type="submit"
+                                    disabled={
+                                      savingCommentId ===
+                                        comment.id ||
+                                      !editCommentText.trim()
+                                    }
+                                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                  >
+                                    {savingCommentId ===
+                                    comment.id && (
+                                      <LoaderCircle
+                                        size={14}
+                                        className="animate-spin"
+                                      />
+                                    )}
+
+                                    {savingCommentId ===
+                                    comment.id
+                                      ? 'Saving...'
+                                      : 'Save changes'}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {commentActionErrorId ===
+                                comment.id &&
+                                commentActionError && (
+                                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                                    {commentActionError}
+                                  </div>
+                                )}
+                            </form>
+                          ) : (
+                            <>
+                              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
+                                {comment.commentText}
+                              </p>
+
+                              {commentActionErrorId ===
+                                comment.id &&
+                                commentActionError && (
+                                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                                    {commentActionError}
+                                  </div>
+                                )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              <form
+                onSubmit={handleCreateComment}
+                className="border-t border-slate-200 p-5 sm:p-6"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-900">
+                      Add a reply
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      {isFinalTicket
+                        ? 'Comments are disabled because this ticket is closed or cancelled.'
+                        : 'Send a public reply or an authorised internal note.'}
+                    </p>
+                  </div>
+
+                  {canCreateInternalNote &&
+                    !isFinalTicket && (
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={
+                            newCommentIsInternal
+                          }
+                          onChange={(event) => {
+                            setNewCommentIsInternal(
+                              event.target.checked,
+                            )
+                            setCommentError('')
+                            setCommentSuccess('')
+                          }}
+                          disabled={submittingComment}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                        />
+
+                        Internal note
+                      </label>
+                    )}
+                </div>
+
+                <textarea
+                  value={newCommentText}
+                  onChange={(event) => {
+                    setNewCommentText(
+                      event.target.value,
+                    )
+                    setCommentError('')
+                    setCommentSuccess('')
+                  }}
+                  maxLength={5000}
+                  rows={5}
+                  disabled={
+                    isFinalTicket ||
+                    submittingComment
+                  }
+                  placeholder={
+                    isFinalTicket
+                      ? 'Comments are disabled for this ticket.'
+                      : newCommentIsInternal
+                        ? 'Write a private note for support staff...'
+                        : 'Write a public reply...'
+                  }
+                  className="mt-4 w-full resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                />
+
+                <div className="mt-2 flex items-center justify-between gap-4">
+                  <span className="text-xs font-medium text-slate-400">
+                    {newCommentText.length}/5000
+                  </span>
+
+                  <button
+                    type="submit"
+                    disabled={
+                      isFinalTicket ||
+                      submittingComment ||
+                      !newCommentText.trim()
+                    }
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {submittingComment && (
+                      <LoaderCircle
+                        size={16}
+                        className="animate-spin"
+                      />
+                    )}
+
+                    {submittingComment
+                      ? 'Posting...'
+                      : newCommentIsInternal
+                        ? 'Add internal note'
+                        : 'Post reply'}
+                  </button>
+                </div>
+
+                {commentError && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                    {commentError}
+                  </div>
+                )}
+
+                {commentSuccess && (
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                    {commentSuccess}
+                  </div>
+                )}
+              </form>
             </section>
           </div>
 

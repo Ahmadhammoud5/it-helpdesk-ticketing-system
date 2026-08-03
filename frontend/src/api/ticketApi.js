@@ -55,3 +55,45 @@ export async function getTicketWorkTime(ticketId) {
 
   return response.data
 }
+
+export async function getTicketComments(ticketId) {
+  const response = await httpClient.get(
+    `/tickets/${ticketId}/comments`,
+  )
+
+  return response.data
+}
+
+export async function createTicketComment(
+  ticketId,
+  commentData,
+) {
+  const response = await httpClient.post(
+    `/tickets/${ticketId}/comments`,
+    commentData,
+  )
+
+  return response.data
+}
+
+export async function updateTicketComment(
+  ticketId,
+  commentId,
+  commentData,
+) {
+  const response = await httpClient.put(
+    `/tickets/${ticketId}/comments/${commentId}`,
+    commentData,
+  )
+
+  return response.data
+}
+
+export async function deleteTicketComment(
+  ticketId,
+  commentId,
+) {
+  await httpClient.delete(
+    `/tickets/${ticketId}/comments/${commentId}`,
+  )
+}
