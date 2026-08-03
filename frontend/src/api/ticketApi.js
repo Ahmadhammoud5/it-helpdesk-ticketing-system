@@ -97,3 +97,45 @@ export async function deleteTicketComment(
     `/tickets/${ticketId}/comments/${commentId}`,
   )
 }
+
+export async function getSupportAgents() {
+  const response = await httpClient.get(
+    '/tickets/support-agents',
+  )
+
+  return response.data
+}
+
+export async function assignTicket(
+  ticketId,
+  assignmentData,
+) {
+  const response = await httpClient.post(
+    `/tickets/${ticketId}/assign`,
+    assignmentData,
+  )
+
+  return response.data
+}
+
+export async function unassignTicket(
+  ticketId,
+  assignmentData = {},
+) {
+  const response = await httpClient.post(
+    `/tickets/${ticketId}/unassign`,
+    assignmentData,
+  )
+
+  return response.data
+}
+
+export async function getTicketAssignmentHistory(
+  ticketId,
+) {
+  const response = await httpClient.get(
+    `/tickets/${ticketId}/assignment-history`,
+  )
+
+  return response.data
+}

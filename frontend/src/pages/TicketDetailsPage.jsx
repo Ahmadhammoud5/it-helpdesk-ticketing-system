@@ -33,13 +33,17 @@ import {
 } from 'lucide-react'
 
 import {
+  assignTicket,
   createTicketComment,
   deleteTicket,
   deleteTicketComment,
+  getSupportAgents,
+  getTicketAssignmentHistory,
   getTicketById,
   getTicketComments,
   getTicketTimeline,
   getTicketWorkTime,
+  unassignTicket,
   updateTicketComment,
   updateTicketStatus,
 } from '../api/ticketApi'
@@ -47,7 +51,8 @@ import { getStatuses } from '../api/lookupApi'
 import { useAuth } from '../auth/AuthContext'
 
 const statusStyles = {
-  Open: 'bg-blue-50 text-blue-700 ring-blue-600/10',
+  Open:
+    'bg-blue-50 text-blue-700 ring-blue-600/10',
   'In Progress':
     'bg-amber-50 text-amber-700 ring-amber-600/10',
   Pending:
@@ -107,7 +112,7 @@ function normalizeUtcDateValue(dateValue) {
 
 function formatDate(dateValue) {
   if (!dateValue) {
-    return '—'
+    return 'N/A'
   }
 
   const date = new Date(
@@ -115,7 +120,7 @@ function formatDate(dateValue) {
   )
 
   if (Number.isNaN(date.getTime())) {
-    return '—'
+    return 'N/A'
   }
 
   return new Intl.DateTimeFormat('en-GB', {
@@ -149,14 +154,20 @@ function getTimelineTitle(item) {
   }
 
   if (item.fieldName === 'Status') {
-    return `${item.oldValue} → ${item.newValue}`
+    return `${item.oldValue} -> ${item.newValue}`
+  }
+
+  if (item.fieldName === 'AssignedToUser') {
+    return 'Ticket assignment updated'
   }
 
   if (item.fieldName === 'CancellationReason') {
     return 'Cancellation reason'
   }
 
-  if (item.fieldName === 'AccumulatedWorkMinutes') {
+  if (
+    item.fieldName === 'AccumulatedWorkMinutes'
+  ) {
     return 'Active work time updated'
   }
 
@@ -168,12 +179,26 @@ function getTimelineDescription(item) {
     return 'The ticket entered the Open status.'
   }
 
-  if (item.fieldName === 'CancellationReason') {
+  if (
+    item.fieldName === 'CancellationReason'
+  ) {
     return item.newValue
   }
 
-  if (item.fieldName === 'AccumulatedWorkMinutes') {
-    return `${item.oldValue ?? 0} → ${item.newValue ?? 0} minutes`
+  if (
+    item.fieldName === 'AssignedToUser'
+  ) {
+    return `${item.oldValue ?? 'Unassigned'} -> ${
+      item.newValue ?? 'Unassigned'
+    }`
+  }
+
+  if (
+    item.fieldName === 'AccumulatedWorkMinutes'
+  ) {
+    return `${item.oldValue ?? 0} -> ${
+      item.newValue ?? 0
+    } minutes`
   }
 
   return item.newValue
@@ -235,53 +260,116 @@ function TicketDetailsPage() {
   const [timeline, setTimeline] = useState([])
   const [workTime, setWorkTime] = useState(null)
   const [comments, setComments] = useState([])
-  const [newCommentText, setNewCommentText] =
-    useState('')
+
+  const [supportAgents, setSupportAgents] =
+    useState([])
+  const [
+    assignmentHistory,
+    setAssignmentHistory,
+  ] = useState([])
+  const [
+    selectedSupportAgentId,
+    setSelectedSupportAgentId,
+  ] = useState('')
+  const [
+    assignmentReason,
+    setAssignmentReason,
+  ] = useState('')
+  const [
+    assignmentIsEscalation,
+    setAssignmentIsEscalation,
+  ] = useState(false)
+  const [
+    savingAssignment,
+    setSavingAssignment,
+  ] = useState(false)
+  const [
+    unassigningTicket,
+    setUnassigningTicket,
+  ] = useState(false)
+  const [
+    assignmentError,
+    setAssignmentError,
+  ] = useState('')
+  const [
+    assignmentSuccess,
+    setAssignmentSuccess,
+  ] = useState('')
+
+  const [
+    newCommentText,
+    setNewCommentText,
+  ] = useState('')
   const [
     newCommentIsInternal,
     setNewCommentIsInternal,
   ] = useState(false)
-  const [submittingComment, setSubmittingComment] =
-    useState(false)
+  const [
+    submittingComment,
+    setSubmittingComment,
+  ] = useState(false)
   const [commentError, setCommentError] =
     useState('')
   const [commentSuccess, setCommentSuccess] =
     useState('')
 
-  const [editingCommentId, setEditingCommentId] =
-    useState(null)
-  const [editCommentText, setEditCommentText] =
-    useState('')
-  const [savingCommentId, setSavingCommentId] =
-    useState(null)
-  const [deletingCommentId, setDeletingCommentId] =
-    useState(null)
+  const [
+    editingCommentId,
+    setEditingCommentId,
+  ] = useState(null)
+  const [
+    editCommentText,
+    setEditCommentText,
+  ] = useState('')
+  const [
+    savingCommentId,
+    setSavingCommentId,
+  ] = useState(null)
+  const [
+    deletingCommentId,
+    setDeletingCommentId,
+  ] = useState(null)
   const [
     commentActionErrorId,
     setCommentActionErrorId,
   ] = useState(null)
-  const [commentActionError, setCommentActionError] =
-    useState('')
+  const [
+    commentActionError,
+    setCommentActionError,
+  ] = useState('')
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [notFound, setNotFound] = useState(false)
-
-  const [workflowModalOpen, setWorkflowModalOpen] =
+  const [notFound, setNotFound] =
     useState(false)
-  const [selectedStatusId, setSelectedStatusId] =
-    useState('')
+
+  const [
+    workflowModalOpen,
+    setWorkflowModalOpen,
+  ] = useState(false)
+  const [
+    selectedStatusId,
+    setSelectedStatusId,
+  ] = useState('')
   const [statusReason, setStatusReason] =
     useState('')
-  const [updatingStatus, setUpdatingStatus] =
-    useState(false)
-  const [workflowError, setWorkflowError] =
-    useState('')
-  const [workflowSuccess, setWorkflowSuccess] =
-    useState('')
+  const [
+    updatingStatus,
+    setUpdatingStatus,
+  ] = useState(false)
+  const [
+    workflowError,
+    setWorkflowError,
+  ] = useState('')
+  const [
+    workflowSuccess,
+    setWorkflowSuccess,
+  ] = useState('')
 
-  const [deleteModalOpen, setDeleteModalOpen] =
-    useState(false)
+  const [
+    deleteModalOpen,
+    setDeleteModalOpen,
+  ] = useState(false)
   const [deleting, setDeleting] =
     useState(false)
   const [deleteError, setDeleteError] =
@@ -295,7 +383,12 @@ function TicketDetailsPage() {
 
   const isAdmin = roles.includes('Admin')
   const isManager = roles.includes('Manager')
-  const isAgent = roles.includes('ITSupportAgent')
+  const isAgent = roles.includes(
+    'ITSupportAgent',
+  )
+
+  const canManageAssignments =
+    isAdmin || isManager
 
   const canCreateInternalNote =
     isAdmin || isManager || isAgent
@@ -356,44 +449,87 @@ function TicketDetailsPage() {
       status.id === Number(selectedStatusId),
   )
 
-  const loadPageData = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    setNotFound(false)
+  const selectedAgentIsCurrent =
+    Boolean(ticket?.assignedToUserId) &&
+    Number(selectedSupportAgentId) ===
+      Number(ticket?.assignedToUserId)
 
-    try {
-      const [
-        ticketData,
-        statusData,
-        timelineData,
-        workTimeData,
-        commentData,
-      ] = await Promise.all([
-        getTicketById(ticketId),
-        getStatuses(),
-        getTicketTimeline(ticketId),
-        getTicketWorkTime(ticketId),
-        getTicketComments(ticketId),
-      ])
+  const assignmentOperationRunning =
+    savingAssignment || unassigningTicket
 
-      setTicket(ticketData)
-      setStatuses(statusData)
-      setTimeline(timelineData)
-      setWorkTime(workTimeData)
-      setComments(commentData)
-    } catch (requestError) {
-      if (requestError.response?.status === 404) {
-        setNotFound(true)
-      } else {
-        setError(
-          requestError.response?.data?.message ??
-            'Unable to load this ticket. Make sure the backend is running and try again.',
+  const loadPageData = useCallback(
+    async () => {
+      setLoading(true)
+      setError('')
+      setNotFound(false)
+
+      try {
+        const [
+          ticketData,
+          statusData,
+          timelineData,
+          workTimeData,
+          commentData,
+          assignmentHistoryData,
+          supportAgentData,
+        ] = await Promise.all([
+          getTicketById(ticketId),
+          getStatuses(),
+          getTicketTimeline(ticketId),
+          getTicketWorkTime(ticketId),
+          getTicketComments(ticketId),
+          getTicketAssignmentHistory(
+            ticketId,
+          ).catch((requestError) => {
+            if (
+              requestError.response?.status ===
+              403
+            ) {
+              return []
+            }
+
+            throw requestError
+          }),
+          canManageAssignments
+            ? getSupportAgents()
+            : Promise.resolve([]),
+        ])
+
+        setTicket(ticketData)
+        setStatuses(statusData)
+        setTimeline(timelineData)
+        setWorkTime(workTimeData)
+        setComments(commentData)
+        setAssignmentHistory(
+          assignmentHistoryData,
         )
+        setSupportAgents(supportAgentData)
+
+        setSelectedSupportAgentId(
+          ticketData.assignedToUserId
+            ? String(
+                ticketData.assignedToUserId,
+              )
+            : '',
+        )
+      } catch (requestError) {
+        if (
+          requestError.response?.status === 404
+        ) {
+          setNotFound(true)
+        } else {
+          setError(
+            requestError.response?.data
+              ?.message ??
+              'Unable to load this ticket. Make sure the backend is running and try again.',
+          )
+        }
+      } finally {
+        setLoading(false)
       }
-    } finally {
-      setLoading(false)
-    }
-  }, [ticketId])
+    },
+    [ticketId, canManageAssignments],
+  )
 
   async function refreshWorkflowData() {
     const [
@@ -409,6 +545,40 @@ function TicketDetailsPage() {
     setTicket(ticketData)
     setTimeline(timelineData)
     setWorkTime(workTimeData)
+  }
+
+  async function refreshAssignmentData() {
+    const [
+      ticketData,
+      timelineData,
+      assignmentHistoryData,
+    ] = await Promise.all([
+      getTicketById(ticketId),
+      getTicketTimeline(ticketId),
+      getTicketAssignmentHistory(
+        ticketId,
+      ).catch((requestError) => {
+        if (
+          requestError.response?.status === 403
+        ) {
+          return []
+        }
+
+        throw requestError
+      }),
+    ])
+
+    setTicket(ticketData)
+    setTimeline(timelineData)
+    setAssignmentHistory(
+      assignmentHistoryData,
+    )
+
+    setSelectedSupportAgentId(
+      ticketData.assignedToUserId
+        ? String(ticketData.assignedToUserId)
+        : '',
+    )
   }
 
   useEffect(() => {
@@ -443,23 +613,31 @@ function TicketDetailsPage() {
 
           setWorkTime(workTimeData)
         } catch {
-          // Keep the current displayed value if polling fails.
+          // Keep the displayed value when polling fails.
         }
       },
       60000,
     )
 
-    return () => window.clearInterval(intervalId)
+    return () =>
+      window.clearInterval(intervalId)
   }, [
     ticketId,
     workTime?.isCurrentlyWorking,
   ])
 
+  function clearAssignmentMessages() {
+    setAssignmentError('')
+    setAssignmentSuccess('')
+  }
+
   function openWorkflowModal() {
     const firstStatus = availableStatuses[0]
 
     setSelectedStatusId(
-      firstStatus ? String(firstStatus.id) : '',
+      firstStatus
+        ? String(firstStatus.id)
+        : '',
     )
     setStatusReason('')
     setWorkflowError('')
@@ -469,7 +647,9 @@ function TicketDetailsPage() {
   async function handleStatusUpdate(event) {
     event.preventDefault()
 
-    const newStatusId = Number(selectedStatusId)
+    const newStatusId = Number(
+      selectedStatusId,
+    )
     const reason = statusReason.trim()
 
     if (!newStatusId) {
@@ -491,13 +671,11 @@ function TicketDetailsPage() {
     setWorkflowSuccess('')
 
     try {
-      const result = await updateTicketStatus(
-        ticket.id,
-        {
+      const result =
+        await updateTicketStatus(ticket.id, {
           newStatusId,
           reason: reason || null,
-        },
-      )
+        })
 
       await refreshWorkflowData()
 
@@ -509,11 +687,158 @@ function TicketDetailsPage() {
       )
     } catch (requestError) {
       setWorkflowError(
-        requestError.response?.data?.message ??
+        requestError.response?.data
+          ?.message ??
           'Unable to update the ticket status.',
       )
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  async function handleAssignTicket(event) {
+    event.preventDefault()
+
+    const supportAgentId = Number(
+      selectedSupportAgentId,
+    )
+    const reason =
+      assignmentReason.trim()
+    const wasAlreadyAssigned = Boolean(
+      ticket.assignedToUserId,
+    )
+
+    clearAssignmentMessages()
+
+    if (!canManageAssignments) {
+      setAssignmentError(
+        'You are not authorised to assign tickets.',
+      )
+      return
+    }
+
+    if (isFinalTicket) {
+      setAssignmentError(
+        'Closed or cancelled tickets cannot be assigned.',
+      )
+      return
+    }
+
+    if (!supportAgentId) {
+      setAssignmentError(
+        'Select an IT support agent.',
+      )
+      return
+    }
+
+    if (selectedAgentIsCurrent) {
+      setAssignmentError(
+        'This ticket is already assigned to the selected agent.',
+      )
+      return
+    }
+
+    setSavingAssignment(true)
+
+    try {
+      const result = await assignTicket(
+        ticket.id,
+        {
+          supportAgentId,
+          isEscalation:
+            assignmentIsEscalation,
+          assignmentReason:
+            reason || null,
+        },
+      )
+
+      await refreshAssignmentData()
+
+      setAssignmentReason('')
+      setAssignmentIsEscalation(false)
+
+      setAssignmentSuccess(
+        wasAlreadyAssigned
+          ? `Ticket reassigned to ${result.assignedToName}.`
+          : `Ticket assigned to ${result.assignedToName}.`,
+      )
+    } catch (requestError) {
+      setAssignmentError(
+        requestError.response?.data
+          ?.message ??
+          'Unable to assign the ticket.',
+      )
+    } finally {
+      setSavingAssignment(false)
+    }
+  }
+
+  async function handleUnassignTicket() {
+    const reason =
+      assignmentReason.trim()
+
+    clearAssignmentMessages()
+
+    if (!canManageAssignments) {
+      setAssignmentError(
+        'You are not authorised to unassign tickets.',
+      )
+      return
+    }
+
+    if (!ticket.assignedToUserId) {
+      setAssignmentError(
+        'The ticket is not currently assigned.',
+      )
+      return
+    }
+
+    if (isFinalTicket) {
+      setAssignmentError(
+        'Closed or cancelled tickets cannot be unassigned.',
+      )
+      return
+    }
+
+    const assignedAgentName =
+      ticket.assignedToName ??
+      'the current agent'
+
+    const confirmed = window.confirm(
+      `Unassign ${assignedAgentName} from this ticket?`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setUnassigningTicket(true)
+
+    try {
+      const result = await unassignTicket(
+        ticket.id,
+        {
+          assignmentReason:
+            reason || null,
+        },
+      )
+
+      await refreshAssignmentData()
+
+      setAssignmentReason('')
+      setAssignmentIsEscalation(false)
+
+      setAssignmentSuccess(
+        `Ticket unassigned from ${result.assignedToName}.`,
+      )
+    } catch (requestError) {
+      setAssignmentError(
+        requestError.response?.data
+          ?.message ??
+          'Unable to unassign the ticket.',
+      )
+    } finally {
+      setUnassigningTicket(false)
     }
   }
 
@@ -532,7 +857,8 @@ function TicketDetailsPage() {
       })
     } catch (requestError) {
       setDeleteError(
-        requestError.response?.data?.message ??
+        requestError.response?.data
+          ?.message ??
           'Unable to delete this ticket. Please try again.',
       )
     } finally {
@@ -543,7 +869,8 @@ function TicketDetailsPage() {
   async function handleCreateComment(event) {
     event.preventDefault()
 
-    const commentText = newCommentText.trim()
+    const commentText =
+      newCommentText.trim()
 
     setCommentError('')
     setCommentSuccess('')
@@ -556,7 +883,9 @@ function TicketDetailsPage() {
     }
 
     if (!commentText) {
-      setCommentError('Comment text is required.')
+      setCommentError(
+        'Comment text is required.',
+      )
       return
     }
 
@@ -575,15 +904,21 @@ function TicketDetailsPage() {
 
     try {
       const createdComment =
-        await createTicketComment(ticketId, {
-          commentText,
-          isInternal: creatingInternalNote,
-        })
+        await createTicketComment(
+          ticketId,
+          {
+            commentText,
+            isInternal:
+              creatingInternalNote,
+          },
+        )
 
-      setComments((currentComments) => [
-        ...currentComments,
-        createdComment,
-      ])
+      setComments(
+        (currentComments) => [
+          ...currentComments,
+          createdComment,
+        ],
+      )
 
       setNewCommentText('')
       setNewCommentIsInternal(false)
@@ -595,7 +930,8 @@ function TicketDetailsPage() {
       )
     } catch (requestError) {
       setCommentError(
-        requestError.response?.data?.message ??
+        requestError.response?.data
+          ?.message ??
           'Unable to post the comment. Try again.',
       )
     } finally {
@@ -605,7 +941,9 @@ function TicketDetailsPage() {
 
   function startEditingComment(comment) {
     setEditingCommentId(comment.id)
-    setEditCommentText(comment.commentText)
+    setEditCommentText(
+      comment.commentText,
+    )
     setCommentActionErrorId(null)
     setCommentActionError('')
   }
@@ -623,7 +961,8 @@ function TicketDetailsPage() {
   ) {
     event.preventDefault()
 
-    const commentText = editCommentText.trim()
+    const commentText =
+      editCommentText.trim()
 
     setCommentActionErrorId(null)
     setCommentActionError('')
@@ -656,12 +995,13 @@ function TicketDetailsPage() {
           },
         )
 
-      setComments((currentComments) =>
-        currentComments.map((comment) =>
-          comment.id === commentId
-            ? updatedComment
-            : comment,
-        ),
+      setComments(
+        (currentComments) =>
+          currentComments.map((comment) =>
+            comment.id === commentId
+              ? updatedComment
+              : comment,
+          ),
       )
 
       setEditingCommentId(null)
@@ -669,7 +1009,8 @@ function TicketDetailsPage() {
     } catch (requestError) {
       setCommentActionErrorId(commentId)
       setCommentActionError(
-        requestError.response?.data?.message ??
+        requestError.response?.data
+          ?.message ??
           'Unable to update this comment.',
       )
     } finally {
@@ -677,7 +1018,9 @@ function TicketDetailsPage() {
     }
   }
 
-  async function handleDeleteComment(commentId) {
+  async function handleDeleteComment(
+    commentId,
+  ) {
     const confirmed = window.confirm(
       'Delete this comment permanently?',
     )
@@ -696,20 +1039,25 @@ function TicketDetailsPage() {
         commentId,
       )
 
-      setComments((currentComments) =>
-        currentComments.filter(
-          (comment) => comment.id !== commentId,
-        ),
+      setComments(
+        (currentComments) =>
+          currentComments.filter(
+            (comment) =>
+              comment.id !== commentId,
+          ),
       )
 
-      if (editingCommentId === commentId) {
+      if (
+        editingCommentId === commentId
+      ) {
         setEditingCommentId(null)
         setEditCommentText('')
       }
     } catch (requestError) {
       setCommentActionErrorId(commentId)
       setCommentActionError(
-        requestError.response?.data?.message ??
+        requestError.response?.data
+          ?.message ??
           'Unable to delete this comment.',
       )
     } finally {
@@ -733,7 +1081,8 @@ function TicketDetailsPage() {
         </h1>
 
         <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-          This ticket does not exist, was deleted, or you do not have
+          This ticket does not exist, was
+          deleted, or you do not have
           permission to access it.
         </p>
 
@@ -791,7 +1140,9 @@ function TicketDetailsPage() {
               </p>
 
               <p className="mt-1 text-sm text-emerald-700">
-                Your support request was saved and sent to the IT team.
+                Your support request was
+                saved and sent to the IT
+                team.
               </p>
             </div>
           </section>
@@ -818,7 +1169,9 @@ function TicketDetailsPage() {
 
             <button
               type="button"
-              onClick={() => setWorkflowSuccess('')}
+              onClick={() =>
+                setWorkflowSuccess('')
+              }
               className="rounded-lg p-1 text-emerald-600 transition hover:bg-emerald-100"
               aria-label="Dismiss"
             >
@@ -842,7 +1195,9 @@ function TicketDetailsPage() {
                 <span
                   className={[
                     'inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 ring-inset',
-                    statusStyles[ticket.statusName] ??
+                    statusStyles[
+                      ticket.statusName
+                    ] ??
                       'bg-slate-100 text-slate-600 ring-slate-500/10',
                   ].join(' ')}
                 >
@@ -859,7 +1214,8 @@ function TicketDetailsPage() {
                     }}
                   />
 
-                  {ticket.priorityName} priority
+                  {ticket.priorityName}{' '}
+                  priority
                 </span>
 
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -878,10 +1234,13 @@ function TicketDetailsPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              {availableStatuses.length > 0 && (
+              {availableStatuses.length >
+                0 && (
                 <button
                   type="button"
-                  onClick={openWorkflowModal}
+                  onClick={
+                    openWorkflowModal
+                  }
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
                 >
                   <RefreshCw size={17} />
@@ -921,7 +1280,9 @@ function TicketDetailsPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Information submitted with this support request.
+                  Information submitted
+                  with this support
+                  request.
                 </p>
               </div>
 
@@ -940,14 +1301,19 @@ function TicketDetailsPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Status rules, active work time and completion dates.
+                    Status rules, active
+                    work time and
+                    completion dates.
                   </p>
                 </div>
 
-                {availableStatuses.length > 0 && (
+                {availableStatuses.length >
+                  0 && (
                   <button
                     type="button"
-                    onClick={openWorkflowModal}
+                    onClick={
+                      openWorkflowModal
+                    }
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
                   >
                     <RefreshCw size={16} />
@@ -964,7 +1330,9 @@ function TicketDetailsPage() {
 
                   <div className="mt-3 flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
-                      <ShieldCheck size={20} />
+                      <ShieldCheck
+                        size={20}
+                      />
                     </div>
 
                     <div>
@@ -973,7 +1341,9 @@ function TicketDetailsPage() {
                       </p>
 
                       <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                        {statusDescriptions[ticket.statusName] ??
+                        {statusDescriptions[
+                          ticket.statusName
+                        ] ??
                           'Ticket workflow status.'}
                       </p>
                     </div>
@@ -1026,7 +1396,9 @@ function TicketDetailsPage() {
                       </p>
 
                       <p className="mt-0.5 text-xs text-slate-500">
-                        From creation until the latest final state
+                        From creation until
+                        the latest final
+                        state
                       </p>
                     </div>
                   </div>
@@ -1038,13 +1410,17 @@ function TicketDetailsPage() {
                   </p>
 
                   <div className="mt-3 flex items-center gap-3">
-                    <div className={[
-                      'flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm',
-                      workTime?.isCurrentlyWorking
-                        ? 'text-emerald-600'
-                        : 'text-slate-400',
-                    ].join(' ')}>
-                      <PlayCircle size={20} />
+                    <div
+                      className={[
+                        'flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm',
+                        workTime?.isCurrentlyWorking
+                          ? 'text-emerald-600'
+                          : 'text-slate-400',
+                      ].join(' ')}
+                    >
+                      <PlayCircle
+                        size={20}
+                      />
                     </div>
 
                     <div>
@@ -1075,13 +1451,17 @@ function TicketDetailsPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Public replies and authorised internal notes.
+                    Public replies and
+                    authorised internal
+                    notes.
                   </p>
                 </div>
 
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
                   {comments.length}{' '}
-                  {comments.length === 1 ? 'comment' : 'comments'}
+                  {comments.length === 1
+                    ? 'comment'
+                    : 'comments'}
                 </span>
               </div>
 
@@ -1096,63 +1476,94 @@ function TicketDetailsPage() {
                   </h3>
 
                   <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                    Ticket communication will appear here.
+                    Ticket communication
+                    will appear here.
                   </p>
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {comments.map((comment) => (
-                    <article
-                      key={comment.id}
-                      className={
-                        comment.isInternal
-                          ? 'bg-amber-50/60 px-5 py-5 sm:px-6'
-                          : 'px-5 py-5 sm:px-6'
-                      }
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
-                          {comment.userName
-                            ?.trim()
-                            .charAt(0)
-                            .toUpperCase() || '?'}
-                        </div>
+                  {comments.map(
+                    (comment) => (
+                      <article
+                        key={comment.id}
+                        className={
+                          comment.isInternal
+                            ? 'bg-amber-50/60 px-5 py-5 sm:px-6'
+                            : 'px-5 py-5 sm:px-6'
+                        }
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                            {comment.userName
+                              ?.trim()
+                              .charAt(0)
+                              .toUpperCase() ||
+                              '?'}
+                          </div>
 
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-bold text-slate-900">
-                                  {comment.userName}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-bold text-slate-900">
+                                    {
+                                      comment.userName
+                                    }
+                                  </p>
+
+                                  {comment.isInternal && (
+                                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">
+                                      Internal
+                                      note
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {formatDate(
+                                    comment.createdDate,
+                                  )}
+                                  {comment.updatedDate
+                                    ? ' - Edited'
+                                    : ''}
                                 </p>
-
-                                {comment.isInternal && (
-                                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">
-                                    Internal note
-                                  </span>
-                                )}
                               </div>
 
-                              <p className="mt-1 text-xs text-slate-500">
-                                {formatDate(
-                                  comment.createdDate,
-                                )}
-                                {comment.updatedDate
-                                  ? ' · Edited'
-                                  : ''}
-                              </p>
-                            </div>
+                              {(comment.canEdit ||
+                                comment.canDelete) && (
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {comment.canEdit &&
+                                    !isFinalTicket && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          startEditingComment(
+                                            comment,
+                                          )
+                                        }
+                                        disabled={
+                                          savingCommentId ===
+                                            comment.id ||
+                                          deletingCommentId ===
+                                            comment.id
+                                        }
+                                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        <Edit3
+                                          size={
+                                            14
+                                          }
+                                        />
+                                        Edit
+                                      </button>
+                                    )}
 
-                            {(comment.canEdit ||
-                              comment.canDelete) && (
-                              <div className="flex shrink-0 items-center gap-2">
-                                {comment.canEdit &&
-                                  !isFinalTicket && (
+                                  {comment.canDelete && (
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        startEditingComment(
-                                          comment,
+                                        handleDeleteComment(
+                                          comment.id,
                                         )
                                       }
                                       disabled={
@@ -1161,158 +1572,173 @@ function TicketDetailsPage() {
                                         deletingCommentId ===
                                           comment.id
                                       }
-                                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
-                                      <Edit3 size={14} />
-                                      Edit
+                                      {deletingCommentId ===
+                                      comment.id ? (
+                                        <LoaderCircle
+                                          size={
+                                            14
+                                          }
+                                          className="animate-spin"
+                                        />
+                                      ) : (
+                                        <Trash2
+                                          size={
+                                            14
+                                          }
+                                        />
+                                      )}
+
+                                      {deletingCommentId ===
+                                      comment.id
+                                        ? 'Deleting...'
+                                        : 'Delete'}
                                     </button>
                                   )}
+                                </div>
+                              )}
+                            </div>
 
-                                {comment.canDelete && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleDeleteComment(
-                                        comment.id,
-                                      )
-                                    }
-                                    disabled={
-                                      savingCommentId ===
-                                        comment.id ||
-                                      deletingCommentId ===
-                                        comment.id
-                                    }
-                                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    {deletingCommentId ===
-                                    comment.id ? (
-                                      <LoaderCircle
-                                        size={14}
-                                        className="animate-spin"
-                                      />
-                                    ) : (
-                                      <Trash2 size={14} />
-                                    )}
-
-                                    {deletingCommentId ===
+                            {editingCommentId ===
+                            comment.id ? (
+                              <form
+                                onSubmit={(
+                                  event,
+                                ) =>
+                                  handleUpdateComment(
+                                    event,
+                                    comment.id,
+                                  )
+                                }
+                                className="mt-4"
+                              >
+                                <textarea
+                                  value={
+                                    editCommentText
+                                  }
+                                  onChange={(
+                                    event,
+                                  ) => {
+                                    setEditCommentText(
+                                      event
+                                        .target
+                                        .value,
+                                    )
+                                    setCommentActionErrorId(
+                                      null,
+                                    )
+                                    setCommentActionError(
+                                      '',
+                                    )
+                                  }}
+                                  maxLength={
+                                    5000
+                                  }
+                                  rows={4}
+                                  disabled={
+                                    savingCommentId ===
                                     comment.id
-                                      ? 'Deleting...'
-                                      : 'Delete'}
-                                  </button>
-                                )}
-                              </div>
+                                  }
+                                  className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                                />
+
+                                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                                  <span className="text-xs font-medium text-slate-400">
+                                    {
+                                      editCommentText.length
+                                    }
+                                    /5000
+                                  </span>
+
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={
+                                        cancelEditingComment
+                                      }
+                                      disabled={
+                                        savingCommentId ===
+                                        comment.id
+                                      }
+                                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <X
+                                        size={
+                                          14
+                                        }
+                                      />
+                                      Cancel
+                                    </button>
+
+                                    <button
+                                      type="submit"
+                                      disabled={
+                                        savingCommentId ===
+                                          comment.id ||
+                                        !editCommentText.trim()
+                                      }
+                                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                    >
+                                      {savingCommentId ===
+                                        comment.id && (
+                                        <LoaderCircle
+                                          size={
+                                            14
+                                          }
+                                          className="animate-spin"
+                                        />
+                                      )}
+
+                                      {savingCommentId ===
+                                      comment.id
+                                        ? 'Saving...'
+                                        : 'Save changes'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {commentActionErrorId ===
+                                  comment.id &&
+                                  commentActionError && (
+                                    <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                                      {
+                                        commentActionError
+                                      }
+                                    </div>
+                                  )}
+                              </form>
+                            ) : (
+                              <>
+                                <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
+                                  {
+                                    comment.commentText
+                                  }
+                                </p>
+
+                                {commentActionErrorId ===
+                                  comment.id &&
+                                  commentActionError && (
+                                    <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                                      {
+                                        commentActionError
+                                      }
+                                    </div>
+                                  )}
+                              </>
                             )}
                           </div>
-
-                          {editingCommentId ===
-                          comment.id ? (
-                            <form
-                              onSubmit={(event) =>
-                                handleUpdateComment(
-                                  event,
-                                  comment.id,
-                                )
-                              }
-                              className="mt-4"
-                            >
-                              <textarea
-                                value={editCommentText}
-                                onChange={(event) => {
-                                  setEditCommentText(
-                                    event.target.value,
-                                  )
-                                  setCommentActionErrorId(
-                                    null,
-                                  )
-                                  setCommentActionError('')
-                                }}
-                                maxLength={5000}
-                                rows={4}
-                                disabled={
-                                  savingCommentId ===
-                                  comment.id
-                                }
-                                className="w-full resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
-                              />
-
-                              <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                                <span className="text-xs font-medium text-slate-400">
-                                  {editCommentText.length}/5000
-                                </span>
-
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={
-                                      cancelEditingComment
-                                    }
-                                    disabled={
-                                      savingCommentId ===
-                                      comment.id
-                                    }
-                                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    <X size={14} />
-                                    Cancel
-                                  </button>
-
-                                  <button
-                                    type="submit"
-                                    disabled={
-                                      savingCommentId ===
-                                        comment.id ||
-                                      !editCommentText.trim()
-                                    }
-                                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                                  >
-                                    {savingCommentId ===
-                                    comment.id && (
-                                      <LoaderCircle
-                                        size={14}
-                                        className="animate-spin"
-                                      />
-                                    )}
-
-                                    {savingCommentId ===
-                                    comment.id
-                                      ? 'Saving...'
-                                      : 'Save changes'}
-                                  </button>
-                                </div>
-                              </div>
-
-                              {commentActionErrorId ===
-                                comment.id &&
-                                commentActionError && (
-                                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                                    {commentActionError}
-                                  </div>
-                                )}
-                            </form>
-                          ) : (
-                            <>
-                              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
-                                {comment.commentText}
-                              </p>
-
-                              {commentActionErrorId ===
-                                comment.id &&
-                                commentActionError && (
-                                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                                    {commentActionError}
-                                  </div>
-                                )}
-                            </>
-                          )}
                         </div>
-                      </div>
-                    </article>
-                  ))}
+                      </article>
+                    ),
+                  )}
                 </div>
               )}
 
               <form
-                onSubmit={handleCreateComment}
+                onSubmit={
+                  handleCreateComment
+                }
                 className="border-t border-slate-200 p-5 sm:p-6"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1336,14 +1762,23 @@ function TicketDetailsPage() {
                           checked={
                             newCommentIsInternal
                           }
-                          onChange={(event) => {
+                          onChange={(
+                            event,
+                          ) => {
                             setNewCommentIsInternal(
-                              event.target.checked,
+                              event.target
+                                .checked,
                             )
-                            setCommentError('')
-                            setCommentSuccess('')
+                            setCommentError(
+                              '',
+                            )
+                            setCommentSuccess(
+                              '',
+                            )
                           }}
-                          disabled={submittingComment}
+                          disabled={
+                            submittingComment
+                          }
                           className="h-4 w-4 rounded border-slate-300 text-blue-600"
                         />
 
@@ -1379,7 +1814,8 @@ function TicketDetailsPage() {
 
                 <div className="mt-2 flex items-center justify-between gap-4">
                   <span className="text-xs font-medium text-slate-400">
-                    {newCommentText.length}/5000
+                    {newCommentText.length}
+                    /5000
                   </span>
 
                   <button
@@ -1464,21 +1900,26 @@ function TicketDetailsPage() {
                   icon={UserRound}
                   label="Assigned agent"
                 >
-                  {ticket.assignedToName ?? 'Unassigned'}
+                  {ticket.assignedToName ??
+                    'Unassigned'}
                 </DetailRow>
 
                 <DetailRow
                   icon={CalendarDays}
                   label="Created"
                 >
-                  {formatDate(ticket.createdDate)}
+                  {formatDate(
+                    ticket.createdDate,
+                  )}
                 </DetailRow>
 
                 <DetailRow
                   icon={Clock3}
                   label="Last updated"
                 >
-                  {formatDate(ticket.lastUpdatedDate)}
+                  {formatDate(
+                    ticket.lastUpdatedDate,
+                  )}
                 </DetailRow>
 
                 {ticket.resolvedDate && (
@@ -1486,7 +1927,9 @@ function TicketDetailsPage() {
                     icon={CheckCircle2}
                     label="Resolved"
                   >
-                    {formatDate(ticket.resolvedDate)}
+                    {formatDate(
+                      ticket.resolvedDate,
+                    )}
                   </DetailRow>
                 )}
 
@@ -1495,7 +1938,9 @@ function TicketDetailsPage() {
                     icon={ShieldCheck}
                     label="Closed"
                   >
-                    {formatDate(ticket.closedDate)}
+                    {formatDate(
+                      ticket.closedDate,
+                    )}
                   </DetailRow>
                 )}
 
@@ -1504,10 +1949,370 @@ function TicketDetailsPage() {
                     icon={X}
                     label="Cancelled"
                   >
-                    {formatDate(ticket.cancelledDate)}
+                    {formatDate(
+                      ticket.cancelledDate,
+                    )}
                   </DetailRow>
                 )}
               </div>
+            </section>
+
+            {canManageAssignments && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">
+                      Ticket assignment
+                    </h2>
+
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Assign, reassign or
+                      unassign this ticket.
+                    </p>
+                  </div>
+
+                  <UserRound
+                    size={21}
+                    className="text-blue-600"
+                  />
+                </div>
+
+                {isFinalTicket && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-5 text-amber-700">
+                    Assignment controls are
+                    disabled because this
+                    ticket is closed or
+                    cancelled.
+                  </div>
+                )}
+
+                <form
+                  onSubmit={
+                    handleAssignTicket
+                  }
+                  className="mt-5 space-y-4"
+                >
+                  <div>
+                    <label
+                      htmlFor="support-agent"
+                      className="text-sm font-bold text-slate-700"
+                    >
+                      IT support agent
+                    </label>
+
+                    <select
+                      id="support-agent"
+                      value={
+                        selectedSupportAgentId
+                      }
+                      onChange={(
+                        event,
+                      ) => {
+                        setSelectedSupportAgentId(
+                          event.target.value,
+                        )
+                        clearAssignmentMessages()
+                      }}
+                      disabled={
+                        isFinalTicket ||
+                        assignmentOperationRunning
+                      }
+                      className="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    >
+                      <option value="">
+                        Select an agent
+                      </option>
+
+                      {supportAgents.map(
+                        (agent) => (
+                          <option
+                            key={
+                              agent.userId
+                            }
+                            value={
+                              agent.userId
+                            }
+                          >
+                            {
+                              agent.fullName
+                            }
+                          </option>
+                        ),
+                      )}
+                    </select>
+
+                    {supportAgents.length ===
+                      0 && (
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        No active IT
+                        support agents are
+                        available.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="assignment-reason"
+                      className="text-sm font-bold text-slate-700"
+                    >
+                      Reason{' '}
+                      <span className="font-medium text-slate-400">
+                        (optional)
+                      </span>
+                    </label>
+
+                    <textarea
+                      id="assignment-reason"
+                      value={
+                        assignmentReason
+                      }
+                      onChange={(
+                        event,
+                      ) => {
+                        setAssignmentReason(
+                          event.target.value,
+                        )
+                        clearAssignmentMessages()
+                      }}
+                      rows={3}
+                      maxLength={1000}
+                      disabled={
+                        isFinalTicket ||
+                        assignmentOperationRunning
+                      }
+                      placeholder="Add context for this assignment operation..."
+                      className="mt-2 w-full resize-y rounded-xl border border-slate-300 px-3 py-3 text-sm leading-6 text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    />
+
+                    <p className="mt-1 text-right text-xs text-slate-400">
+                      {
+                        assignmentReason.length
+                      }
+                      /1000
+                    </p>
+                  </div>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-slate-50 p-3">
+                    <input
+                      type="checkbox"
+                      checked={
+                        assignmentIsEscalation
+                      }
+                      onChange={(
+                        event,
+                      ) => {
+                        setAssignmentIsEscalation(
+                          event.target
+                            .checked,
+                        )
+                        clearAssignmentMessages()
+                      }}
+                      disabled={
+                        isFinalTicket ||
+                        assignmentOperationRunning
+                      }
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+                    />
+
+                    <span>
+                      <span className="block text-sm font-bold text-slate-700">
+                        Escalation
+                      </span>
+
+                      <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                        Mark this
+                        assignment as an
+                        escalation.
+                      </span>
+                    </span>
+                  </label>
+
+                  {assignmentError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                      {assignmentError}
+                    </div>
+                  )}
+
+                  {assignmentSuccess && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                      {assignmentSuccess}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="submit"
+                      disabled={
+                        isFinalTicket ||
+                        assignmentOperationRunning ||
+                        !selectedSupportAgentId ||
+                        selectedAgentIsCurrent ||
+                        supportAgents.length ===
+                          0
+                      }
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {savingAssignment && (
+                        <LoaderCircle
+                          size={16}
+                          className="animate-spin"
+                        />
+                      )}
+
+                      {savingAssignment
+                        ? 'Saving...'
+                        : ticket.assignedToUserId
+                          ? 'Reassign ticket'
+                          : 'Assign ticket'}
+                    </button>
+
+                    {ticket.assignedToUserId && (
+                      <button
+                        type="button"
+                        onClick={
+                          handleUnassignTicket
+                        }
+                        disabled={
+                          isFinalTicket ||
+                          assignmentOperationRunning
+                        }
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {unassigningTicket && (
+                          <LoaderCircle
+                            size={16}
+                            className="animate-spin"
+                          />
+                        )}
+
+                        {unassigningTicket
+                          ? 'Unassigning...'
+                          : 'Unassign ticket'}
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </section>
+            )}
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Assignment history
+                  </h2>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Previous and current
+                    ticket assignments
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                  {
+                    assignmentHistory.length
+                  }
+                </span>
+              </div>
+
+              {assignmentHistory.length ===
+              0 ? (
+                <div className="mt-5 rounded-xl bg-slate-50 p-4 text-center">
+                  <p className="text-sm font-semibold text-slate-600">
+                    No assignments yet
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Assignment activity
+                    will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-5 space-y-3">
+                  {assignmentHistory.map(
+                    (
+                      assignment,
+                      index,
+                    ) => (
+                      <article
+                        key={`${assignment.assignedToUserId}-${assignment.assignedDate}-${index}`}
+                        className="rounded-xl border border-slate-200 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-900">
+                              {assignment.assignedToName ??
+                                'Unknown agent'}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              Assigned by{' '}
+                              {assignment.assignedByName ??
+                                'Unknown user'}
+                            </p>
+                          </div>
+
+                          <span
+                            className={[
+                              'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold',
+                              assignment.unassignedDate
+                                ? 'bg-slate-100 text-slate-600'
+                                : 'bg-emerald-100 text-emerald-700',
+                            ].join(' ')}
+                          >
+                            {assignment.unassignedDate
+                              ? 'Ended'
+                              : 'Current'}
+                          </span>
+                        </div>
+
+                        {assignment.isEscalation && (
+                          <span className="mt-3 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+                            Escalation
+                          </span>
+                        )}
+
+                        <div className="mt-3 space-y-1.5 text-xs leading-5 text-slate-500">
+                          <p>
+                            <span className="font-semibold text-slate-600">
+                              Assigned:
+                            </span>{' '}
+                            {formatDate(
+                              assignment.assignedDate,
+                            )}
+                          </p>
+
+                          {assignment.unassignedDate && (
+                            <p>
+                              <span className="font-semibold text-slate-600">
+                                Unassigned:
+                              </span>{' '}
+                              {formatDate(
+                                assignment.unassignedDate,
+                              )}
+                            </p>
+                          )}
+                        </div>
+
+                        {assignment.assignmentReason && (
+                          <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2">
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                              Reason
+                            </p>
+
+                            <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">
+                              {
+                                assignment.assignmentReason
+                              }
+                            </p>
+                          </div>
+                        )}
+                      </article>
+                    ),
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
@@ -1518,7 +2323,8 @@ function TicketDetailsPage() {
                   </h2>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Exact actor, action and time
+                    Exact actor, action
+                    and time
                   </p>
                 </div>
 
@@ -1531,44 +2337,62 @@ function TicketDetailsPage() {
               <div className="mt-6">
                 {timeline.length === 0 ? (
                   <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-                    No workflow history has been recorded.
+                    No workflow history
+                    has been recorded.
                   </p>
                 ) : (
-                  timeline.map((item, index) => (
-                    <div
-                      key={`${item.id}-${item.fieldName}-${item.changedAtUtc}`}
-                      className="relative flex gap-4 pb-7 last:pb-0"
-                    >
-                      {index < timeline.length - 1 && (
-                        <div className="absolute left-[15px] top-8 h-[calc(100%-16px)] w-px bg-slate-200" />
-                      )}
+                  timeline.map(
+                    (item, index) => (
+                      <div
+                        key={`${item.id}-${item.fieldName}-${item.changedAtUtc}`}
+                        className="relative flex gap-4 pb-7 last:pb-0"
+                      >
+                        {index <
+                          timeline.length -
+                            1 && (
+                          <div className="absolute left-[15px] top-8 h-[calc(100%-16px)] w-px bg-slate-200" />
+                        )}
 
-                      <div className={[
-                        'relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2',
-                        item.fieldName ===
-                        'CancellationReason'
-                          ? 'border-red-500 bg-red-500 text-white'
-                          : 'border-blue-600 bg-blue-600 text-white',
-                      ].join(' ')}>
-                        <CheckCircle2 size={15} />
+                        <div
+                          className={[
+                            'relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2',
+                            item.fieldName ===
+                            'CancellationReason'
+                              ? 'border-red-500 bg-red-500 text-white'
+                              : 'border-blue-600 bg-blue-600 text-white',
+                          ].join(' ')}
+                        >
+                          <CheckCircle2
+                            size={15}
+                          />
+                        </div>
+
+                        <div className="min-w-0 pt-0.5">
+                          <p className="text-sm font-bold text-slate-900">
+                            {getTimelineTitle(
+                              item,
+                            )}
+                          </p>
+
+                          <p className="mt-1 break-words text-xs leading-5 text-slate-500">
+                            {getTimelineDescription(
+                              item,
+                            )}
+                          </p>
+
+                          <p className="mt-2 text-[11px] font-semibold text-slate-400">
+                            {
+                              item.changedByName
+                            }{' '}
+                            -{' '}
+                            {formatDate(
+                              item.changedAtUtc,
+                            )}
+                          </p>
+                        </div>
                       </div>
-
-                      <div className="min-w-0 pt-0.5">
-                        <p className="text-sm font-bold text-slate-900">
-                          {getTimelineTitle(item)}
-                        </p>
-
-                        <p className="mt-1 break-words text-xs leading-5 text-slate-500">
-                          {getTimelineDescription(item)}
-                        </p>
-
-                        <p className="mt-2 text-[11px] font-semibold text-slate-400">
-                          {item.changedByName} ·{' '}
-                          {formatDate(item.changedAtUtc)}
-                        </p>
-                      </div>
-                    </div>
-                  ))
+                    ),
+                  )
                 )}
               </div>
             </section>
@@ -1608,7 +2432,9 @@ function TicketDetailsPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setWorkflowModalOpen(false)
+                  setWorkflowModalOpen(
+                    false,
+                  )
                 }
                 disabled={updatingStatus}
                 className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed"
@@ -1648,21 +2474,24 @@ function TicketDetailsPage() {
                 }}
                 className="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               >
-                {availableStatuses.map((status) => (
-                  <option
-                    key={status.id}
-                    value={status.id}
-                  >
-                    {status.statusName}
-                  </option>
-                ))}
+                {availableStatuses.map(
+                  (status) => (
+                    <option
+                      key={status.id}
+                      value={status.id}
+                    >
+                      {status.statusName}
+                    </option>
+                  ),
+                )}
               </select>
 
               {selectedStatus && (
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   {statusDescriptions[
                     selectedStatus.statusName
-                  ] ?? 'Update the ticket workflow.'}
+                  ] ??
+                    'Update the ticket workflow.'}
                 </p>
               )}
             </div>
@@ -1673,7 +2502,8 @@ function TicketDetailsPage() {
                 className="text-sm font-bold text-slate-700"
               >
                 Reason
-                {Number(selectedStatusId) === 6
+                {Number(selectedStatusId) ===
+                6
                   ? ' *'
                   : ' (optional)'}
               </label>
@@ -1682,13 +2512,17 @@ function TicketDetailsPage() {
                 id="status-reason"
                 value={statusReason}
                 onChange={(event) => {
-                  setStatusReason(event.target.value)
+                  setStatusReason(
+                    event.target.value,
+                  )
                   setWorkflowError('')
                 }}
                 rows={4}
                 maxLength={1000}
                 placeholder={
-                  Number(selectedStatusId) === 6
+                  Number(
+                    selectedStatusId,
+                  ) === 6
                     ? 'Explain why this ticket is being cancelled...'
                     : 'Add context for this workflow update...'
                 }
@@ -1696,7 +2530,8 @@ function TicketDetailsPage() {
               />
 
               <p className="mt-1 text-right text-xs text-slate-400">
-                {statusReason.length}/1000
+                {statusReason.length}
+                /1000
               </p>
             </div>
 
@@ -1712,7 +2547,9 @@ function TicketDetailsPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setWorkflowModalOpen(false)
+                  setWorkflowModalOpen(
+                    false,
+                  )
                 }
                 disabled={updatingStatus}
                 className="h-11 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
@@ -1779,8 +2616,10 @@ function TicketDetailsPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              The ticket will be removed from the active list while
-              its audit records remain stored.
+              The ticket will be removed
+              from the active list while
+              its audit records remain
+              stored.
             </p>
 
             <div className="mt-5 rounded-xl bg-slate-50 p-4">
