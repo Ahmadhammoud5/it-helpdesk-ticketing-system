@@ -1,4 +1,4 @@
-﻿using ITHelpDesk.Api.Entities;
+using ITHelpDesk.Api.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -44,10 +44,21 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(ticket => ticket.ClosedDate)
             .HasColumnType("datetime2");
 
+        builder.Property(ticket => ticket.CancelledDate)
+            .HasColumnType("datetime2");
+
+        builder.Property(ticket => ticket.WorkStartedAtUtc)
+            .HasColumnType("datetime2");
+
+        builder.Property(ticket => ticket.AccumulatedWorkMinutes)
+            .HasDefaultValue(0);
+
         builder.Property(ticket => ticket.IsDeleted)
             .HasDefaultValue(false);
 
-        // Seeded Open status has ID 1.
+        builder.Property(ticket => ticket.DeletedDate)
+            .HasColumnType("datetime2");
+
         builder.Property(ticket => ticket.StatusId)
             .HasDefaultValue(1);
 
@@ -76,15 +87,19 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
             .HasForeignKey(ticket => ticket.AssignedToUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Useful indexes for filtering and future dashboard queries.
+        builder.HasOne(ticket => ticket.DeletedByUser)
+            .WithMany(user => user.DeletedTickets)
+            .HasForeignKey(ticket => ticket.DeletedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(ticket => ticket.CategoryId);
         builder.HasIndex(ticket => ticket.PriorityId);
         builder.HasIndex(ticket => ticket.StatusId);
         builder.HasIndex(ticket => ticket.CreatedByUserId);
         builder.HasIndex(ticket => ticket.AssignedToUserId);
+        builder.HasIndex(ticket => ticket.DeletedByUserId);
         builder.HasIndex(ticket => ticket.CreatedDate);
 
-        // Soft-deleted tickets are hidden from normal queries.
         builder.HasQueryFilter(ticket => !ticket.IsDeleted);
     }
 }

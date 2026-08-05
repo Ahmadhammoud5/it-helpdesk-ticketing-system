@@ -1,4 +1,4 @@
-﻿using ITHelpDesk.Api.Entities;
+using ITHelpDesk.Api.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -66,6 +66,14 @@ public class StatusConfiguration : IEntityTypeConfiguration<Status>
                 Id = 5,
                 StatusName = "Closed",
                 SortOrder = 5,
+                IsFinal = true,
+                IsActive = true
+            },
+            new Status
+            {
+                Id = 6,
+                StatusName = "Cancelled",
+                SortOrder = 6,
                 IsFinal = true,
                 IsActive = true
             }

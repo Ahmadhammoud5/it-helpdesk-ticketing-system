@@ -1,4 +1,4 @@
-﻿using ITHelpDesk.Api.Entities;
+using ITHelpDesk.Api.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -27,12 +27,22 @@ public class ApplicationDbContext
 
     public DbSet<Status> Statuses => Set<Status>();
 
+    public DbSet<TicketAssignment> TicketAssignments
+        => Set<TicketAssignment>();
+
+    public DbSet<TicketHistory> TicketHistory
+        => Set<TicketHistory>();
+
+    public DbSet<TicketComment> TicketComments
+        => Set<TicketComment>();
+
+    public DbSet<ActivityLog> ActivityLogs
+        => Set<ActivityLog>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
 
-        // Loads CategoryConfiguration, PriorityConfiguration,
-        // StatusConfiguration and TicketConfiguration.
         builder.ApplyConfigurationsFromAssembly(
             typeof(ApplicationDbContext).Assembly);
 
