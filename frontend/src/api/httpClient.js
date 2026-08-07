@@ -7,9 +7,6 @@ import {
 
 const httpClient = axios.create({
   baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
 })
 
 httpClient.interceptors.request.use((config) => {
@@ -17,6 +14,10 @@ httpClient.interceptors.request.use((config) => {
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']
   }
 
   return config

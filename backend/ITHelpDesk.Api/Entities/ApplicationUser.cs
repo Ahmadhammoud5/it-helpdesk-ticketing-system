@@ -40,10 +40,13 @@ public class ApplicationUser : IdentityUser<int>
         { get; set; } = new List<TicketHistory>();
 
     public ICollection<TicketComment> TicketComments
-        { get; set; } = new List<TicketComment>();
+    { get; set; } = new List<TicketComment>();
 
-    public ICollection<TicketComment> DeletedTicketComments
-        { get; set; } = new List<TicketComment>();
+public ICollection<TicketComment> DeletedTicketComments
+    { get; set; } = new List<TicketComment>();
+
+public ICollection<TicketAttachment> TicketAttachments
+    { get; set; } = new List<TicketAttachment>();
 
     public ICollection<ActivityLog> ActivityLogs
         { get; set; } = new List<ActivityLog>();

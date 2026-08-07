@@ -34,12 +34,13 @@ public class ApplicationDbContext
         => Set<TicketHistory>();
 
     public DbSet<TicketComment> TicketComments
-        => Set<TicketComment>();
+    => Set<TicketComment>();
 
-    public DbSet<ActivityLog> ActivityLogs
-        => Set<ActivityLog>();
+public DbSet<TicketAttachment> TicketAttachments
+    => Set<TicketAttachment>();
 
-    protected override void OnModelCreating(ModelBuilder builder)
+public DbSet<ActivityLog> ActivityLogs
+    => Set<ActivityLog>();    protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
 

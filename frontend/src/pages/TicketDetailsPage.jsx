@@ -17,17 +17,21 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Download,
   Edit3,
+  FileText,
   Hash,
   History,
   Info,
   LoaderCircle,
+  Paperclip,
   PlayCircle,
   RefreshCw,
   ShieldCheck,
   Tag,
   Timer,
   Trash2,
+  Upload,
   UserRound,
   X,
 } from 'lucide-react'
@@ -36,9 +40,12 @@ import {
   assignTicket,
   createTicketComment,
   deleteTicket,
+  deleteTicketAttachment,
   deleteTicketComment,
+  downloadTicketAttachment,
   getSupportAgents,
   getTicketAssignmentHistory,
+  getTicketAttachments,
   getTicketById,
   getTicketComments,
   getTicketTimeline,
@@ -46,6 +53,7 @@ import {
   unassignTicket,
   updateTicketComment,
   updateTicketStatus,
+  uploadTicketAttachments,
 } from '../api/ticketApi'
 import { getStatuses } from '../api/lookupApi'
 import { useAuth } from '../auth/AuthContext'
@@ -87,6 +95,28 @@ const allowedTransitions = {
   5: [],
   6: [],
 }
+
+const attachmentAccept =
+  '.png,.jpg,.jpeg,.webp,.pdf,.txt,.docx,.xlsx'
+
+const allowedAttachmentExtensions = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.pdf',
+  '.txt',
+  '.docx',
+  '.xlsx',
+])
+
+const maxAttachmentFileSize =
+  10 * 1024 * 1024
+
+const maxAttachmentsPerUpload = 5
+
+const maxTicketAttachmentSize =
+  50 * 1024 * 1024
 
 function normalizeUtcDateValue(dateValue) {
   if (typeof dateValue !== 'string') {
@@ -146,6 +176,36 @@ function formatDuration(minutesValue) {
   }
 
   return `${hours} hr ${minutes} min`
+}
+
+function formatFileSize(bytesValue) {
+  const bytes = Number(bytesValue) || 0
+
+  if (bytes < 1024) {
+    return `${bytes} B`
+  }
+
+  const kilobytes = bytes / 1024
+
+  if (kilobytes < 1024) {
+    return `${kilobytes.toFixed(1)} KB`
+  }
+
+  const megabytes = kilobytes / 1024
+
+  return `${megabytes.toFixed(1)} MB`
+}
+
+function getFileExtension(fileName) {
+  const lastDotIndex = fileName.lastIndexOf('.')
+
+  if (lastDotIndex < 0) {
+    return ''
+  }
+
+  return fileName
+    .slice(lastDotIndex)
+    .toLowerCase()
 }
 
 function getTimelineTitle(item) {
@@ -260,6 +320,42 @@ function TicketDetailsPage() {
   const [timeline, setTimeline] = useState([])
   const [workTime, setWorkTime] = useState(null)
   const [comments, setComments] = useState([])
+
+  const [attachments, setAttachments] =
+    useState([])
+
+  const [selectedFiles, setSelectedFiles] =
+    useState([])
+
+  const [
+    attachmentInputKey,
+    setAttachmentInputKey,
+  ] = useState(0)
+
+  const [
+    uploadingAttachments,
+    setUploadingAttachments,
+  ] = useState(false)
+
+  const [
+    downloadingAttachmentId,
+    setDownloadingAttachmentId,
+  ] = useState(null)
+
+  const [
+    deletingAttachmentId,
+    setDeletingAttachmentId,
+  ] = useState(null)
+
+  const [
+    attachmentError,
+    setAttachmentError,
+  ] = useState('')
+
+  const [
+    attachmentSuccess,
+    setAttachmentSuccess,
+  ] = useState('')
 
   const [supportAgents, setSupportAgents] =
     useState([])
@@ -470,6 +566,7 @@ function TicketDetailsPage() {
           timelineData,
           workTimeData,
           commentData,
+          attachmentData,
           assignmentHistoryData,
           supportAgentData,
         ] = await Promise.all([
@@ -478,6 +575,7 @@ function TicketDetailsPage() {
           getTicketTimeline(ticketId),
           getTicketWorkTime(ticketId),
           getTicketComments(ticketId),
+          getTicketAttachments(ticketId),
           getTicketAssignmentHistory(
             ticketId,
           ).catch((requestError) => {
@@ -500,6 +598,7 @@ function TicketDetailsPage() {
         setTimeline(timelineData)
         setWorkTime(workTimeData)
         setComments(commentData)
+        setAttachments(attachmentData)
         setAssignmentHistory(
           assignmentHistoryData,
         )
@@ -1065,6 +1164,240 @@ function TicketDetailsPage() {
     }
   }
 
+  function clearAttachmentMessages() {
+    setAttachmentError('')
+    setAttachmentSuccess('')
+  }
+
+  function handleAttachmentSelection(event) {
+    const files = Array.from(
+      event.target.files ?? [],
+    )
+
+    clearAttachmentMessages()
+
+    if (
+      files.length >
+      maxAttachmentsPerUpload
+    ) {
+      setSelectedFiles([])
+      event.target.value = ''
+
+      setAttachmentError(
+        'Select no more than 5 files at once.',
+      )
+
+      return
+    }
+
+    const invalidTypeFile = files.find(
+      (file) =>
+        !allowedAttachmentExtensions.has(
+          getFileExtension(file.name),
+        ),
+    )
+
+    if (invalidTypeFile) {
+      setSelectedFiles([])
+      event.target.value = ''
+
+      setAttachmentError(
+        `${invalidTypeFile.name} has an unsupported file type.`,
+      )
+
+      return
+    }
+
+    const oversizedFile = files.find(
+      (file) =>
+        file.size > maxAttachmentFileSize,
+    )
+
+    if (oversizedFile) {
+      setSelectedFiles([])
+      event.target.value = ''
+
+      setAttachmentError(
+        `${oversizedFile.name} exceeds the 10 MB file limit.`,
+      )
+
+      return
+    }
+
+    const currentStoredSize =
+      attachments.reduce(
+        (total, attachment) =>
+          total +
+          (Number(
+            attachment.fileSizeBytes,
+          ) || 0),
+        0,
+      )
+
+    const selectedSize = files.reduce(
+      (total, file) =>
+        total + file.size,
+      0,
+    )
+
+    if (
+      currentStoredSize + selectedSize >
+      maxTicketAttachmentSize
+    ) {
+      setSelectedFiles([])
+      event.target.value = ''
+
+      setAttachmentError(
+        'These files would exceed the 50 MB attachment limit for this ticket.',
+      )
+
+      return
+    }
+
+    setSelectedFiles(files)
+  }
+
+  async function handleUploadAttachments(
+    event,
+  ) {
+    event.preventDefault()
+
+    clearAttachmentMessages()
+
+    if (selectedFiles.length === 0) {
+      setAttachmentError(
+        'Select at least one file to upload.',
+      )
+
+      return
+    }
+
+    setUploadingAttachments(true)
+
+    try {
+      const uploadedCount =
+        selectedFiles.length
+
+      await uploadTicketAttachments(
+        ticketId,
+        selectedFiles,
+      )
+
+      const attachmentData =
+        await getTicketAttachments(ticketId)
+
+      setAttachments(attachmentData)
+      setSelectedFiles([])
+
+      setAttachmentInputKey(
+        (currentKey) => currentKey + 1,
+      )
+
+      setAttachmentSuccess(
+        uploadedCount === 1
+          ? 'File uploaded successfully.'
+          : `${uploadedCount} files uploaded successfully.`,
+      )
+    } catch (requestError) {
+      setAttachmentError(
+        requestError.response?.data
+          ?.message ??
+          'Unable to upload the selected files.',
+      )
+    } finally {
+      setUploadingAttachments(false)
+    }
+  }
+
+  async function handleDownloadAttachment(
+    attachment,
+  ) {
+    clearAttachmentMessages()
+
+    setDownloadingAttachmentId(
+      attachment.id,
+    )
+
+    try {
+      const fileBlob =
+        await downloadTicketAttachment(
+          ticketId,
+          attachment.id,
+        )
+
+      const downloadUrl =
+        window.URL.createObjectURL(
+          fileBlob,
+        )
+
+      const link =
+        document.createElement('a')
+
+      link.href = downloadUrl
+      link.download =
+        attachment.originalFileName
+
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+
+      window.URL.revokeObjectURL(
+        downloadUrl,
+      )
+    } catch {
+      setAttachmentError(
+        'Unable to download this attachment.',
+      )
+    } finally {
+      setDownloadingAttachmentId(null)
+    }
+  }
+
+  async function handleDeleteAttachment(
+    attachment,
+  ) {
+    const confirmed = window.confirm(
+      `Delete ${attachment.originalFileName}?`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    clearAttachmentMessages()
+
+    setDeletingAttachmentId(
+      attachment.id,
+    )
+
+    try {
+      await deleteTicketAttachment(
+        ticketId,
+        attachment.id,
+      )
+
+      setAttachments(
+        (currentAttachments) =>
+          currentAttachments.filter(
+            (item) =>
+              item.id !== attachment.id,
+          ),
+      )
+
+      setAttachmentSuccess(
+        'Attachment deleted successfully.',
+      )
+    } catch (requestError) {
+      setAttachmentError(
+        requestError.response?.data
+          ?.message ??
+          'Unable to delete this attachment.',
+      )
+    } finally {
+      setDeletingAttachmentId(null)
+    }
+  }
+
   if (loading) {
     return <TicketDetailsSkeleton />
   }
@@ -1291,6 +1624,307 @@ function TicketDetailsPage() {
                   {ticket.description}
                 </p>
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
+              <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-6">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <Paperclip size={20} />
+                  </div>
+
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">
+                      Attachments
+                    </h2>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Screenshots, documents,
+                      logs and supporting
+                      files.
+                    </p>
+                  </div>
+                </div>
+
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                  {attachments.length}{' '}
+                  {attachments.length === 1
+                    ? 'file'
+                    : 'files'}
+                </span>
+              </div>
+
+              <form
+                onSubmit={
+                  handleUploadAttachments
+                }
+                className="border-b border-slate-200 p-5 sm:p-6"
+              >
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">
+                        Add files
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        PNG, JPG, WEBP, PDF,
+                        TXT, DOCX or XLSX.
+                        Maximum 5 files per
+                        upload and 10 MB each.
+                      </p>
+                    </div>
+
+                    <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-50">
+                      <Paperclip size={16} />
+
+                      Choose files
+
+                      <input
+                        key={
+                          attachmentInputKey
+                        }
+                        type="file"
+                        multiple
+                        accept={
+                          attachmentAccept
+                        }
+                        onChange={
+                          handleAttachmentSelection
+                        }
+                        disabled={
+                          uploadingAttachments
+                        }
+                        className="sr-only"
+                      />
+                    </label>
+                  </div>
+
+                  {selectedFiles.length >
+                    0 && (
+                    <div className="mt-4 space-y-2">
+                      {selectedFiles.map(
+                        (file, index) => (
+                          <div
+                            key={`${file.name}-${file.size}-${index}`}
+                            className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5"
+                          >
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <FileText
+                                size={16}
+                                className="shrink-0 text-slate-400"
+                              />
+
+                              <p className="truncate text-xs font-semibold text-slate-700">
+                                {file.name}
+                              </p>
+                            </div>
+
+                            <span className="shrink-0 text-[11px] font-medium text-slate-400">
+                              {formatFileSize(
+                                file.size,
+                              )}
+                            </span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs font-medium text-slate-500">
+                      {selectedFiles.length ===
+                      0
+                        ? 'No files selected.'
+                        : `${selectedFiles.length} ${
+                            selectedFiles.length ===
+                            1
+                              ? 'file'
+                              : 'files'
+                          } selected.`}
+                    </p>
+
+                    <button
+                      type="submit"
+                      disabled={
+                        uploadingAttachments ||
+                        selectedFiles.length ===
+                          0
+                      }
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {uploadingAttachments ? (
+                        <LoaderCircle
+                          size={16}
+                          className="animate-spin"
+                        />
+                      ) : (
+                        <Upload size={16} />
+                      )}
+
+                      {uploadingAttachments
+                        ? 'Uploading...'
+                        : 'Upload'}
+                    </button>
+                  </div>
+                </div>
+
+                {attachmentError && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                    {attachmentError}
+                  </div>
+                )}
+
+                {attachmentSuccess && (
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                    {attachmentSuccess}
+                  </div>
+                )}
+              </form>
+
+              {attachments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                    <FileText size={21} />
+                  </div>
+
+                  <h3 className="mt-3 text-sm font-bold text-slate-800">
+                    No attachments yet
+                  </h3>
+
+                  <p className="mt-1 max-w-md text-xs leading-5 text-slate-500">
+                    Uploaded screenshots,
+                    documents and logs will
+                    appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {attachments.map(
+                    (attachment) => {
+                      const canDeleteAttachment =
+                        isAdmin ||
+                        isManager ||
+                        Number(
+                          attachment.uploadedByUserId,
+                        ) === currentUserId
+
+                      return (
+                        <article
+                          key={
+                            attachment.id
+                          }
+                          className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+                        >
+                          <div className="flex min-w-0 items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                              <FileText
+                                size={18}
+                              />
+                            </div>
+
+                            <div className="min-w-0">
+                              <p
+                                className="truncate text-sm font-bold text-slate-900"
+                                title={
+                                  attachment.originalFileName
+                                }
+                              >
+                                {
+                                  attachment.originalFileName
+                                }
+                              </p>
+
+                              <p className="mt-1 text-xs leading-5 text-slate-500">
+                                {formatFileSize(
+                                  attachment.fileSizeBytes,
+                                )}{' '}
+                                - Uploaded by{' '}
+                                {attachment.uploadedByName ||
+                                  'Unknown user'}{' '}
+                                -{' '}
+                                {formatDate(
+                                  attachment.createdDate,
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDownloadAttachment(
+                                  attachment,
+                                )
+                              }
+                              disabled={
+                                downloadingAttachmentId ===
+                                  attachment.id ||
+                                deletingAttachmentId ===
+                                  attachment.id
+                              }
+                              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {downloadingAttachmentId ===
+                              attachment.id ? (
+                                <LoaderCircle
+                                  size={14}
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <Download
+                                  size={14}
+                                />
+                              )}
+
+                              {downloadingAttachmentId ===
+                              attachment.id
+                                ? 'Downloading...'
+                                : 'Download'}
+                            </button>
+
+                            {canDeleteAttachment && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteAttachment(
+                                    attachment,
+                                  )
+                                }
+                                disabled={
+                                  downloadingAttachmentId ===
+                                    attachment.id ||
+                                  deletingAttachmentId ===
+                                    attachment.id
+                                }
+                                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {deletingAttachmentId ===
+                                attachment.id ? (
+                                  <LoaderCircle
+                                    size={14}
+                                    className="animate-spin"
+                                  />
+                                ) : (
+                                  <Trash2
+                                    size={14}
+                                  />
+                                )}
+
+                                {deletingAttachmentId ===
+                                attachment.id
+                                  ? 'Deleting...'
+                                  : 'Delete'}
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      )
+                    },
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
