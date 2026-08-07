@@ -11,11 +11,18 @@ export async function getTicketById(ticketId) {
 }
 
 export async function createTicket(ticketData) {
-  const response = await httpClient.post('/tickets', ticketData)
+  const response = await httpClient.post(
+    '/tickets',
+    ticketData,
+  )
+
   return response.data
 }
 
-export async function updateTicket(ticketId, ticketData) {
+export async function updateTicket(
+  ticketId,
+  ticketData,
+) {
   const response = await httpClient.put(
     `/tickets/${ticketId}`,
     ticketData,
@@ -138,4 +145,53 @@ export async function getTicketAssignmentHistory(
   )
 
   return response.data
+}
+
+export async function getTicketAttachments(ticketId) {
+  const response = await httpClient.get(
+    `/tickets/${ticketId}/attachments`,
+  )
+
+  return response.data
+}
+
+export async function uploadTicketAttachments(
+  ticketId,
+  files,
+) {
+  const formData = new FormData()
+
+  files.forEach((file) => {
+    formData.append('files', file)
+  })
+
+  const response = await httpClient.post(
+    `/tickets/${ticketId}/attachments`,
+    formData,
+  )
+
+  return response.data
+}
+
+export async function downloadTicketAttachment(
+  ticketId,
+  attachmentId,
+) {
+  const response = await httpClient.get(
+    `/tickets/${ticketId}/attachments/${attachmentId}/download`,
+    {
+      responseType: 'blob',
+    },
+  )
+
+  return response.data
+}
+
+export async function deleteTicketAttachment(
+  ticketId,
+  attachmentId,
+) {
+  await httpClient.delete(
+    `/tickets/${ticketId}/attachments/${attachmentId}`,
+  )
 }

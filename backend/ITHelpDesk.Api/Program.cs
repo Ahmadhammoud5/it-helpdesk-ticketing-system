@@ -54,6 +54,29 @@ builder.Services
         "Email:FromName is missing.")
     .ValidateOnStart();
 
+// Ticket attachment configuration
+builder.Services
+    .AddOptions<TicketAttachmentOptions>()
+    .Bind(
+        builder.Configuration.GetSection(
+            TicketAttachmentOptions.SectionName))
+    .Validate(
+        options => options.MaxFileSizeBytes > 0,
+        "Ticket attachment max file size must be greater than zero.")
+    .Validate(
+        options => options.MaxFilesPerUpload > 0,
+        "Ticket attachment max files per upload must be greater than zero.")
+    .Validate(
+        options => options.MaxTotalSizePerTicketBytes > 0,
+        "Ticket attachment max total size per ticket must be greater than zero.")
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.StorageRoot),
+        "Ticket attachment storage root is missing.")
+    .Validate(
+        options => options.AllowedExtensions.Length > 0,
+        "At least one ticket attachment extension must be allowed.")
+    .ValidateOnStart();
+
 // Database connection
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection")
@@ -130,7 +153,6 @@ builder.Services.AddScoped<
     ITicketQueryService,
     TicketQueryService>();
 
-
 builder.Services.AddScoped<
     ITicketWorkflowService,
     TicketWorkflowService>();
@@ -138,10 +160,14 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     ITicketAssignmentService,
     TicketAssignmentService>();
+
 builder.Services.AddScoped<
     ITicketCommentService,
     TicketCommentService>();
 
+builder.Services.AddScoped<
+    ITicketAttachmentService,
+    TicketAttachmentService>();
 // JWT authentication
 builder.Services
     .AddAuthentication(options =>
