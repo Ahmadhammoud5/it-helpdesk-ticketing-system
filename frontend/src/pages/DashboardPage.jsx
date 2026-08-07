@@ -15,6 +15,7 @@ import {
   TicketCheck,
 } from 'lucide-react'
 
+import { getDashboardSummary } from '../api/dashboardApi'
 import { getTickets } from '../api/ticketApi'
 import { useAuth } from '../auth/AuthContext'
 
@@ -98,6 +99,15 @@ function DashboardPage() {
   const { user } = useAuth()
 
   const [tickets, setTickets] = useState([])
+
+  const [summary, setSummary] = useState({
+    totalTickets: 0,
+    openTickets: 0,
+    inProgressTickets: 0,
+    pendingTickets: 0,
+    resolvedTickets: 0,
+  })
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -106,11 +116,30 @@ function DashboardPage() {
     setError('')
 
     try {
-      const data = await getTickets()
+      const [
+        summaryData,
+        ticketData,
+      ] = await Promise.all([
+        getDashboardSummary(),
+        getTickets(),
+      ])
+
+      setSummary({
+        totalTickets:
+          Number(summaryData?.totalTickets) || 0,
+        openTickets:
+          Number(summaryData?.openTickets) || 0,
+        inProgressTickets:
+          Number(summaryData?.inProgressTickets) || 0,
+        pendingTickets:
+          Number(summaryData?.pendingTickets) || 0,
+        resolvedTickets:
+          Number(summaryData?.resolvedTickets) || 0,
+      })
 
       setTickets(
-        Array.isArray(data)
-          ? data
+        Array.isArray(ticketData)
+          ? ticketData
           : [],
       )
     } catch (requestError) {
@@ -127,30 +156,6 @@ function DashboardPage() {
     loadDashboard()
   }, [])
 
-  const statistics = useMemo(() => {
-    return {
-      open: tickets.filter(
-        (ticket) => ticket.statusName === 'Open',
-      ).length,
-
-      inProgress: tickets.filter(
-        (ticket) =>
-          ticket.statusName === 'In Progress',
-      ).length,
-
-      pending: tickets.filter(
-        (ticket) =>
-          ticket.statusName === 'Pending',
-      ).length,
-
-      resolved: tickets.filter(
-        (ticket) =>
-          ticket.statusName === 'Resolved' ||
-          ticket.statusName === 'Closed',
-      ).length,
-    }
-  }, [tickets])
-
   const recentTickets = useMemo(() => {
     return [...tickets]
       .sort(
@@ -164,28 +169,28 @@ function DashboardPage() {
   const summaryCards = [
     {
       label: 'Open tickets',
-      value: statistics.open,
+      value: summary.openTickets,
       description: 'Waiting for IT review',
       icon: CircleDot,
       iconClass: 'bg-blue-50 text-blue-600',
     },
     {
       label: 'In progress',
-      value: statistics.inProgress,
+      value: summary.inProgressTickets,
       description: 'Currently handled by IT',
       icon: Clock3,
       iconClass: 'bg-amber-50 text-amber-600',
     },
     {
       label: 'Pending',
-      value: statistics.pending,
+      value: summary.pendingTickets,
       description: 'Temporarily waiting',
       icon: TicketCheck,
       iconClass: 'bg-violet-50 text-violet-600',
     },
     {
       label: 'Resolved',
-      value: statistics.resolved,
+      value: summary.resolvedTickets,
       description: 'Resolved or closed tickets',
       icon: CheckCircle2,
       iconClass: 'bg-emerald-50 text-emerald-600',
