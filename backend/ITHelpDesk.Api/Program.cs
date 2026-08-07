@@ -168,6 +168,10 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     ITicketAttachmentService,
     TicketAttachmentService>();
+
+builder.Services.AddScoped<
+    IDashboardService,
+    DashboardService>();
 // JWT authentication
 builder.Services
     .AddAuthentication(options =>
