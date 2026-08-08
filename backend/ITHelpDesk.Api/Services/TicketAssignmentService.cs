@@ -12,13 +12,16 @@ public sealed class TicketAssignmentService
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly INotificationService _notificationService;
 
     public TicketAssignmentService(
         ApplicationDbContext dbContext,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        INotificationService notificationService)
     {
         _dbContext = dbContext;
         _userManager = userManager;
+        _notificationService = notificationService;
     }
 
     public async Task<List<SupportAgentResponse>> GetAgentsAsync(
@@ -203,6 +206,33 @@ public sealed class TicketAssignmentService
         await _dbContext.SaveChangesAsync(
             cancellationToken);
 
+        await _notificationService.CreateAsync(
+            agent.Id,
+            ticket.Id,
+            currentAssignment is null
+                ? "TicketAssigned"
+                : "TicketReassigned",
+            currentAssignment is null
+                ? "Ticket assigned to you"
+                : "Ticket reassigned to you",
+            $"Ticket {ticket.ReferenceNumber}: {ticket.Title}",
+            cancellationToken);
+
+        if (ticket.CreatedByUserId != agent.Id)
+        {
+            await _notificationService.CreateAsync(
+                ticket.CreatedByUserId,
+                ticket.Id,
+                currentAssignment is null
+                    ? "TicketAssigned"
+                    : "TicketReassigned",
+                currentAssignment is null
+                    ? "Your ticket was assigned"
+                    : "Your ticket was reassigned",
+                $"Ticket {ticket.ReferenceNumber}: {ticket.Title}",
+                cancellationToken);
+        }
+
         return TicketAssignmentResult<
             TicketAssignmentResponse>.Success(
                 new TicketAssignmentResponse
@@ -327,6 +357,14 @@ public sealed class TicketAssignmentService
             });
 
         await _dbContext.SaveChangesAsync(
+            cancellationToken);
+
+        await _notificationService.CreateAsync(
+            assignment.AssignedToUserAccountId,
+            ticket.Id,
+            "TicketUnassigned",
+            "Ticket unassigned",
+            $"Ticket {ticket.ReferenceNumber} is no longer assigned to you.",
             cancellationToken);
 
         return TicketAssignmentResult<

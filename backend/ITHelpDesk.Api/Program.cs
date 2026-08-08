@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.Entities;
+using ITHelpDesk.Api.Hubs;
 using ITHelpDesk.Api.Options;
 using ITHelpDesk.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -172,6 +173,11 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IDashboardService,
     DashboardService>();
+
+builder.Services.AddScoped<
+    INotificationService,
+    NotificationService>();
+
 // JWT authentication
 builder.Services
     .AddAuthentication(options =>
@@ -205,10 +211,35 @@ builder.Services
                 NameClaimType = ClaimTypes.Name,
                 RoleClaimType = ClaimTypes.Role
             };
+
+        // SignalR authentication.
+        // The SignalR JavaScript client supplies its JWT
+        // through the access_token query string when required.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken =
+                    context.Request.Query["access_token"]
+                        .ToString();
+
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrWhiteSpace(accessToken) &&
+                    path.StartsWithSegments(
+                        "/hubs/notifications"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -244,5 +275,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapHub<NotificationHub>(
+    "/hubs/notifications");
 
 app.Run();

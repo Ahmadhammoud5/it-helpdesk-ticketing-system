@@ -10,11 +10,14 @@ public sealed class TicketWorkflowService
     : ITicketWorkflowService
 {
     private readonly ApplicationDbContext _dbContext;
+    private readonly INotificationService _notificationService;
 
     public TicketWorkflowService(
-        ApplicationDbContext dbContext)
+        ApplicationDbContext dbContext,
+        INotificationService notificationService)
     {
         _dbContext = dbContext;
+        _notificationService = notificationService;
     }
 
     public async Task<
@@ -206,6 +209,33 @@ public sealed class TicketWorkflowService
 
         await _dbContext.SaveChangesAsync(
             cancellationToken);
+
+        if (ticket.CreatedByUserId != userId)
+        {
+            await _notificationService.CreateAsync(
+                ticket.CreatedByUserId,
+                ticket.Id,
+                "TicketStatusChanged",
+                "Ticket status updated",
+                $"Ticket {ticket.ReferenceNumber} changed from " +
+                $"{previousStatusName} to {newStatus.StatusName}.",
+                cancellationToken);
+        }
+
+        if (ticket.AssignedToUserId.HasValue &&
+            ticket.AssignedToUserId.Value != userId &&
+            ticket.AssignedToUserId.Value !=
+                ticket.CreatedByUserId)
+        {
+            await _notificationService.CreateAsync(
+                ticket.AssignedToUserId.Value,
+                ticket.Id,
+                "TicketStatusChanged",
+                "Ticket status updated",
+                $"Ticket {ticket.ReferenceNumber} changed from " +
+                $"{previousStatusName} to {newStatus.StatusName}.",
+                cancellationToken);
+        }
 
         var response =
             new TicketStatusUpdateResponse
