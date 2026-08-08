@@ -63,11 +63,14 @@ public class Ticket
         = new List<TicketHistory>();
 
     public ICollection<TicketComment> Comments { get; set; }
-    = new List<TicketComment>();
+        = new List<TicketComment>();
 
-public ICollection<TicketAttachment> Attachments { get; set; }
-    = new List<TicketAttachment>();
+    public ICollection<TicketAttachment> Attachments { get; set; }
+        = new List<TicketAttachment>();
 
-public ICollection<ActivityLog> ActivityLogs { get; set; }
-    = new List<ActivityLog>();
+    public ICollection<ActivityLog> ActivityLogs { get; set; }
+        = new List<ActivityLog>();
+
+    public ICollection<Notification> Notifications { get; set; }
+        = new List<Notification>();
 }
