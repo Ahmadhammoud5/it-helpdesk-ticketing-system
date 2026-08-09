@@ -7,3 +7,11 @@ export async function getDashboardSummary() {
 
   return response.data
 }
+
+export async function getDashboardCharts() {
+  const response = await httpClient.get(
+    '/dashboard/charts',
+  )
+
+  return response.data
+}

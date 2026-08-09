@@ -15,9 +15,13 @@ import {
   TicketCheck,
 } from 'lucide-react'
 
-import { getDashboardSummary } from '../api/dashboardApi'
+import {
+  getDashboardCharts,
+  getDashboardSummary,
+} from '../api/dashboardApi'
 import { getTickets } from '../api/ticketApi'
 import { useAuth } from '../auth/AuthContext'
+import DashboardCharts from '../components/dashboard/DashboardCharts'
 
 const statusStyles = {
   Open: 'bg-blue-50 text-blue-700 ring-blue-600/10',
@@ -100,6 +104,12 @@ function DashboardPage() {
 
   const [tickets, setTickets] = useState([])
 
+  const [charts, setCharts] = useState({
+    ticketsByStatus: [],
+    ticketsByPriority: [],
+    ticketsByCategory: [],
+  })
+
   const [summary, setSummary] = useState({
     totalTickets: 0,
     openTickets: 0,
@@ -118,9 +128,11 @@ function DashboardPage() {
     try {
       const [
         summaryData,
+        chartData,
         ticketData,
       ] = await Promise.all([
         getDashboardSummary(),
+        getDashboardCharts(),
         getTickets(),
       ])
 
@@ -135,6 +147,15 @@ function DashboardPage() {
           Number(summaryData?.pendingTickets) || 0,
         resolvedTickets:
           Number(summaryData?.resolvedTickets) || 0,
+      })
+
+      setCharts({
+        ticketsByStatus:
+          chartData?.ticketsByStatus ?? [],
+        ticketsByPriority:
+          chartData?.ticketsByPriority ?? [],
+        ticketsByCategory:
+          chartData?.ticketsByCategory ?? [],
       })
 
       setTickets(
@@ -301,6 +322,8 @@ function DashboardPage() {
               ),
             )}
           </section>
+
+          <DashboardCharts charts={charts} />
 
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-5 sm:px-6">

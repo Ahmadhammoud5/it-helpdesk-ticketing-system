@@ -41,6 +41,28 @@ public sealed class DashboardController : ControllerBase
         return Ok(summary);
     }
 
+    [HttpGet("charts")]
+    public async Task<IActionResult> GetCharts(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Unauthorized(new
+            {
+                message =
+                    "The authenticated user identifier is invalid."
+            });
+        }
+
+        var charts =
+            await _dashboardService.GetChartsAsync(
+                userId,
+                User.IsInRole(SystemRoles.Admin),
+                cancellationToken);
+
+        return Ok(charts);
+    }
+
     private bool TryGetCurrentUserId(
         out int userId)
     {
