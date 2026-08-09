@@ -8,4 +8,9 @@ public interface IDashboardService
         int userId,
         bool isAdmin,
         CancellationToken cancellationToken = default);
+
+    Task<DashboardChartsResponse> GetChartsAsync(
+        int userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
 }
