@@ -5,7 +5,6 @@ import {
   useNavigate,
 } from 'react-router'
 import {
-  Bell,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import { useAuth } from '../../auth/AuthContext'
+import NotificationCenter from '../notifications/NotificationCenter'
 
 const navigation = [
   {
@@ -47,7 +47,9 @@ function getInitials(fullName) {
     .trim()
     .split(/\s+/)
     .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
+    .map((part) =>
+      part.charAt(0).toUpperCase(),
+    )
     .join('')
 }
 
@@ -56,8 +58,11 @@ function SidebarContent({
   user,
   onLogout,
 }) {
-  const initials = getInitials(user?.fullName)
-  const primaryRole = user?.roles?.[0] ?? 'Employee'
+  const initials =
+    getInitials(user?.fullName)
+
+  const primaryRole =
+    user?.roles?.[0] ?? 'Employee'
 
   return (
     <div className="flex h-full flex-col">
@@ -120,23 +125,13 @@ function SidebarContent({
                 }
               >
                 <Icon size={18} />
-                <span>{label}</span>
+
+                <span>
+                  {label}
+                </span>
               </NavLink>
             ),
           )}
-
-          <button
-            type="button"
-            disabled
-            className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-slate-400"
-          >
-            <Bell size={18} />
-            <span>Notifications</span>
-
-            <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-              Soon
-            </span>
-          </button>
         </div>
       </nav>
 
@@ -175,15 +170,23 @@ function SidebarContent({
 
 function EmployeeLayout() {
   const navigate = useNavigate()
-  const { user, signOut } = useAuth()
 
-  const [sidebarOpen, setSidebarOpen] =
-    useState(false)
+  const {
+    user,
+    signOut,
+  } = useAuth()
 
-  const initials = getInitials(user?.fullName)
+  const [
+    sidebarOpen,
+    setSidebarOpen,
+  ] = useState(false)
+
+  const initials =
+    getInitials(user?.fullName)
 
   function handleLogout() {
     signOut()
+
     setSidebarOpen(false)
 
     navigate('/login', {
@@ -197,7 +200,9 @@ function EmployeeLayout() {
         <button
           type="button"
           aria-label="Close sidebar overlay"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() =>
+            setSidebarOpen(false)
+          }
           className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm lg:hidden"
         />
       )}
@@ -212,7 +217,9 @@ function EmployeeLayout() {
       >
         <SidebarContent
           user={user}
-          closeSidebar={() => setSidebarOpen(false)}
+          closeSidebar={() =>
+            setSidebarOpen(false)
+          }
           onLogout={handleLogout}
         />
       </aside>
@@ -221,7 +228,9 @@ function EmployeeLayout() {
         <header className="sticky top-0 z-30 flex h-20 items-center border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
           <button
             type="button"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() =>
+              setSidebarOpen(true)
+            }
             className="mr-3 rounded-xl p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
             aria-label="Open navigation"
           >
@@ -242,14 +251,7 @@ function EmployeeLayout() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            <button
-              type="button"
-              disabled
-              className="relative flex h-10 w-10 cursor-not-allowed items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400"
-              aria-label="Notifications coming soon"
-            >
-              <Bell size={18} />
-            </button>
+            <NotificationCenter />
 
             <div
               title={user?.fullName}

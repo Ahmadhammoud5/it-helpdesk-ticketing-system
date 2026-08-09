@@ -36,8 +36,14 @@ public class ApplicationDbContext
     public DbSet<TicketComment> TicketComments
         => Set<TicketComment>();
 
+    public DbSet<TicketAttachment> TicketAttachments
+        => Set<TicketAttachment>();
+
     public DbSet<ActivityLog> ActivityLogs
         => Set<ActivityLog>();
+
+    public DbSet<Notification> Notifications
+        => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -74,14 +80,17 @@ public class ApplicationDbContext
 
             entity.HasKey(department => department.Id);
 
-            entity.Property(department => department.DepartmentName)
+            entity.Property(department =>
+                    department.DepartmentName)
                 .HasMaxLength(100)
                 .IsRequired();
 
-            entity.HasIndex(department => department.DepartmentName)
+            entity.HasIndex(department =>
+                    department.DepartmentName)
                 .IsUnique();
 
-            entity.Property(department => department.Description)
+            entity.Property(department =>
+                    department.Description)
                 .HasMaxLength(255);
         });
 
@@ -95,12 +104,15 @@ public class ApplicationDbContext
                 .HasMaxLength(128)
                 .IsRequired();
 
-            entity.Property(resetCode => resetCode.FailedAttempts)
+            entity.Property(resetCode =>
+                    resetCode.FailedAttempts)
                 .HasDefaultValue(0);
 
             entity.HasOne(resetCode => resetCode.User)
-                .WithMany(user => user.PasswordResetCodes)
-                .HasForeignKey(resetCode => resetCode.UserId)
+                .WithMany(user =>
+                    user.PasswordResetCodes)
+                .HasForeignKey(resetCode =>
+                    resetCode.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(resetCode => new

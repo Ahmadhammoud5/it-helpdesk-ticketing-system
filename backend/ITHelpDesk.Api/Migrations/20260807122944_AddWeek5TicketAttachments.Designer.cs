@@ -4,6 +4,7 @@ using ITHelpDesk.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ITHelpDesk.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807122944_AddWeek5TicketAttachments")]
+    partial class AddWeek5TicketAttachments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -269,55 +272,6 @@ namespace ITHelpDesk.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("Departments", (string)null);
-                });
-
-            modelBuilder.Entity("ITHelpDesk.Api.Entities.Notification", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsRead")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime?>("ReadDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("TicketId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TicketId");
-
-                    b.HasIndex("UserId", "IsRead", "CreatedDate");
-
-                    b.ToTable("Notifications", (string)null);
                 });
 
             modelBuilder.Entity("ITHelpDesk.Api.Entities.PasswordResetCode", b =>
@@ -968,24 +922,6 @@ namespace ITHelpDesk.Api.Migrations
                     b.Navigation("Department");
                 });
 
-            modelBuilder.Entity("ITHelpDesk.Api.Entities.Notification", b =>
-                {
-                    b.HasOne("ITHelpDesk.Api.Entities.Ticket", "Ticket")
-                        .WithMany("Notifications")
-                        .HasForeignKey("TicketId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("ITHelpDesk.Api.Entities.ApplicationUser", "User")
-                        .WithMany("Notifications")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Ticket");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("ITHelpDesk.Api.Entities.PasswordResetCode", b =>
                 {
                     b.HasOne("ITHelpDesk.Api.Entities.ApplicationUser", "User")
@@ -1200,8 +1136,6 @@ namespace ITHelpDesk.Api.Migrations
 
                     b.Navigation("DeletedTickets");
 
-                    b.Navigation("Notifications");
-
                     b.Navigation("PasswordResetCodes");
 
                     b.Navigation("TicketAssignmentsMade");
@@ -1246,8 +1180,6 @@ namespace ITHelpDesk.Api.Migrations
                     b.Navigation("Comments");
 
                     b.Navigation("History");
-
-                    b.Navigation("Notifications");
                 });
 #pragma warning restore 612, 618
         }

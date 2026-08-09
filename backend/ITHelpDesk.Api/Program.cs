@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.Entities;
+using ITHelpDesk.Api.Hubs;
 using ITHelpDesk.Api.Options;
 using ITHelpDesk.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -52,6 +53,29 @@ builder.Services
     .Validate(
         options => !string.IsNullOrWhiteSpace(options.FromName),
         "Email:FromName is missing.")
+    .ValidateOnStart();
+
+// Ticket attachment configuration
+builder.Services
+    .AddOptions<TicketAttachmentOptions>()
+    .Bind(
+        builder.Configuration.GetSection(
+            TicketAttachmentOptions.SectionName))
+    .Validate(
+        options => options.MaxFileSizeBytes > 0,
+        "Ticket attachment max file size must be greater than zero.")
+    .Validate(
+        options => options.MaxFilesPerUpload > 0,
+        "Ticket attachment max files per upload must be greater than zero.")
+    .Validate(
+        options => options.MaxTotalSizePerTicketBytes > 0,
+        "Ticket attachment max total size per ticket must be greater than zero.")
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.StorageRoot),
+        "Ticket attachment storage root is missing.")
+    .Validate(
+        options => options.AllowedExtensions.Length > 0,
+        "At least one ticket attachment extension must be allowed.")
     .ValidateOnStart();
 
 // Database connection
@@ -130,7 +154,6 @@ builder.Services.AddScoped<
     ITicketQueryService,
     TicketQueryService>();
 
-
 builder.Services.AddScoped<
     ITicketWorkflowService,
     TicketWorkflowService>();
@@ -138,9 +161,22 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     ITicketAssignmentService,
     TicketAssignmentService>();
+
 builder.Services.AddScoped<
     ITicketCommentService,
     TicketCommentService>();
+
+builder.Services.AddScoped<
+    ITicketAttachmentService,
+    TicketAttachmentService>();
+
+builder.Services.AddScoped<
+    IDashboardService,
+    DashboardService>();
+
+builder.Services.AddScoped<
+    INotificationService,
+    NotificationService>();
 
 // JWT authentication
 builder.Services
@@ -175,10 +211,35 @@ builder.Services
                 NameClaimType = ClaimTypes.Name,
                 RoleClaimType = ClaimTypes.Role
             };
+
+        // SignalR authentication.
+        // The SignalR JavaScript client supplies its JWT
+        // through the access_token query string when required.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken =
+                    context.Request.Query["access_token"]
+                        .ToString();
+
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrWhiteSpace(accessToken) &&
+                    path.StartsWithSegments(
+                        "/hubs/notifications"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -214,5 +275,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapHub<NotificationHub>(
+    "/hubs/notifications");
 
 app.Run();

@@ -45,6 +45,12 @@ public class ApplicationUser : IdentityUser<int>
     public ICollection<TicketComment> DeletedTicketComments
         { get; set; } = new List<TicketComment>();
 
+    public ICollection<TicketAttachment> TicketAttachments
+        { get; set; } = new List<TicketAttachment>();
+
     public ICollection<ActivityLog> ActivityLogs
         { get; set; } = new List<ActivityLog>();
+
+    public ICollection<Notification> Notifications
+        { get; set; } = new List<Notification>();
 }
