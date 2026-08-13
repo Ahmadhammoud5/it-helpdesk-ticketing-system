@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -59,7 +60,7 @@ function EditTicketPage() {
 
   const [saving, setSaving] = useState(false)
 
-  async function loadPage() {
+  const loadPage = useCallback(async () => {
     setLoading(true)
     setPageError('')
     setNotFound(false)
@@ -114,11 +115,11 @@ function EditTicketPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [ticketId])
 
   useEffect(() => {
     loadPage()
-  }, [ticketId])
+  }, [loadPage])
 
   function handleChange(event) {
     const {
@@ -312,7 +313,7 @@ function EditTicketPage() {
           className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white"
         >
           <ArrowLeft size={17} />
-          Return to my tickets
+          Return to tickets
         </Link>
       </section>
     )
@@ -368,7 +369,7 @@ function EditTicketPage() {
 
           <p className="mt-2 text-sm leading-6 text-slate-500">
             Update the information submitted with
-            your support request.
+            this support request.
           </p>
         </div>
       </section>

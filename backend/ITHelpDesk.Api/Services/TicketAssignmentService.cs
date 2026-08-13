@@ -143,6 +143,10 @@ public sealed class TicketAssignmentService
                 : $"{currentAssignment.AssignedToUserAccount.FirstName} " +
                   $"{currentAssignment.AssignedToUserAccount.LastName}";
 
+        await using var transaction =
+            await _dbContext.Database.BeginTransactionAsync(
+                cancellationToken);
+
         if (currentAssignment is not null)
         {
             currentAssignment.UnassignedDate = now;
@@ -205,6 +209,8 @@ public sealed class TicketAssignmentService
 
         await _dbContext.SaveChangesAsync(
             cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
 
         await _notificationService.CreateAsync(
             agent.Id,
@@ -415,14 +421,13 @@ public sealed class TicketAssignmentService
                         .TicketNotFound);
         }
 
-        var canView =
-            isAdmin ||
-            isManager ||
-            ticket.CreatedByUserId ==
-                currentUserId ||
-            (isSupportAgent &&
-             ticket.AssignedToUserId ==
-                currentUserId);
+        var canView = TicketAccessPolicy.CanView(
+            ticket.CreatedByUserId,
+            ticket.AssignedToUserId,
+            currentUserId,
+            isAdmin,
+            isManager,
+            isSupportAgent);
 
         if (!canView)
         {

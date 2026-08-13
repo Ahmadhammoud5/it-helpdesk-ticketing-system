@@ -112,6 +112,8 @@ public sealed class TicketCommentsController
                     userId,
                     User.IsInRole(SystemRoles.Admin),
                     User.IsInRole(SystemRoles.Manager),
+                    User.IsInRole(
+                        SystemRoles.ITSupportAgent),
                     request,
                     cancellationToken);
 
@@ -144,6 +146,8 @@ public sealed class TicketCommentsController
                     userId,
                     User.IsInRole(SystemRoles.Admin),
                     User.IsInRole(SystemRoles.Manager),
+                    User.IsInRole(
+                        SystemRoles.ITSupportAgent),
                     cancellationToken);
 
         return result.Succeeded
@@ -204,11 +208,13 @@ public sealed class TicketCommentsController
 
             TicketCommentError
                 .InternalCommentForbidden =>
-                BadRequest(new
-                {
-                    message =
-                        "You are not authorized to create internal comments."
-                }),
+                StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        message =
+                            "You are not authorized to create internal comments."
+                    }),
 
             TicketCommentError.TicketIsFinal =>
                 BadRequest(new

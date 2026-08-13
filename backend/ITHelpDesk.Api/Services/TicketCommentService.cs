@@ -42,8 +42,9 @@ public sealed class TicketCommentService
                     TicketCommentError.TicketNotFound);
         }
 
-        if (!CanViewTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -144,8 +145,9 @@ public sealed class TicketCommentService
                     TicketCommentError.TicketNotFound);
         }
 
-        if (!CanViewTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -262,6 +264,7 @@ public sealed class TicketCommentService
             int currentUserId,
             bool isAdmin,
             bool isManager,
+            bool isSupportAgent,
             UpdateTicketCommentRequest request,
             CancellationToken cancellationToken)
     {
@@ -287,6 +290,19 @@ public sealed class TicketCommentService
                     TicketCommentError.TicketNotFound);
         }
 
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
+                currentUserId,
+                isAdmin,
+                isManager,
+                isSupportAgent))
+        {
+            return TicketCommentResult<
+                TicketCommentResponse>.Failure(
+                    TicketCommentError.Forbidden);
+        }
+
         var comment = await _dbContext.TicketComments
             .Include(comment =>
                 comment.UserAccount)
@@ -306,6 +322,20 @@ public sealed class TicketCommentService
         if (comment.UserAccountId != currentUserId &&
             !isAdmin &&
             !isManager)
+        {
+            return TicketCommentResult<
+                TicketCommentResponse>.Failure(
+                    TicketCommentError.Forbidden);
+        }
+
+        var canManageInternalComment =
+            isAdmin ||
+            isManager ||
+            (isSupportAgent &&
+             ticket.AssignedToUserId == currentUserId);
+
+        if (comment.IsInternal &&
+            !canManageInternalComment)
         {
             return TicketCommentResult<
                 TicketCommentResponse>.Failure(
@@ -377,6 +407,7 @@ public sealed class TicketCommentService
             int currentUserId,
             bool isAdmin,
             bool isManager,
+            bool isSupportAgent,
             CancellationToken cancellationToken)
     {
         var ticket = await _dbContext.Tickets
@@ -388,6 +419,18 @@ public sealed class TicketCommentService
         {
             return TicketCommentResult<bool>.Failure(
                 TicketCommentError.TicketNotFound);
+        }
+
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
+                currentUserId,
+                isAdmin,
+                isManager,
+                isSupportAgent))
+        {
+            return TicketCommentResult<bool>.Failure(
+                TicketCommentError.Forbidden);
         }
 
         var comment = await _dbContext.TicketComments
@@ -406,6 +449,19 @@ public sealed class TicketCommentService
         if (comment.UserAccountId != currentUserId &&
             !isAdmin &&
             !isManager)
+        {
+            return TicketCommentResult<bool>.Failure(
+                TicketCommentError.Forbidden);
+        }
+
+        var canManageInternalComment =
+            isAdmin ||
+            isManager ||
+            (isSupportAgent &&
+             ticket.AssignedToUserId == currentUserId);
+
+        if (comment.IsInternal &&
+            !canManageInternalComment)
         {
             return TicketCommentResult<bool>.Failure(
                 TicketCommentError.Forbidden);
@@ -439,22 +495,6 @@ public sealed class TicketCommentService
 
         return TicketCommentResult<bool>.Success(
             true);
-    }
-
-    private static bool CanViewTicket(
-        Ticket ticket,
-        int currentUserId,
-        bool isAdmin,
-        bool isManager,
-        bool isSupportAgent)
-    {
-        return isAdmin ||
-               isManager ||
-               ticket.CreatedByUserId ==
-                   currentUserId ||
-               (isSupportAgent &&
-                ticket.AssignedToUserId ==
-                    currentUserId);
     }
 
     private static TicketCommentError

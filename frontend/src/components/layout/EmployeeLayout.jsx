@@ -1,42 +1,33 @@
-import { useState } from 'react'
+import {
+  Suspense,
+  useEffect,
+  useState,
+} from 'react'
 import {
   NavLink,
   Outlet,
+  useLocation,
   useNavigate,
 } from 'react-router'
 import {
   LayoutDashboard,
+  LoaderCircle,
   LogOut,
   Menu,
   PlusCircle,
   Search,
   TicketCheck,
+  UsersRound,
   X,
 } from 'lucide-react'
 
-import { useAuth } from '../../auth/AuthContext'
+import { useAuth } from '../../auth/useAuth'
+import {
+  getRoleContext,
+  getRoles,
+  ROLES,
+} from '../../auth/roles'
 import NotificationCenter from '../notifications/NotificationCenter'
-
-const navigation = [
-  {
-    label: 'Dashboard',
-    to: '/dashboard',
-    icon: LayoutDashboard,
-    end: true,
-  },
-  {
-    label: 'Create ticket',
-    to: '/tickets/create',
-    icon: PlusCircle,
-    end: true,
-  },
-  {
-    label: 'My tickets',
-    to: '/tickets',
-    icon: TicketCheck,
-    end: true,
-  },
-]
 
 function getInitials(fullName) {
   if (!fullName) {
@@ -53,6 +44,119 @@ function getInitials(fullName) {
     .join('')
 }
 
+function getNavigation(roles) {
+  const isAdmin = roles.includes(ROLES.admin)
+  const isManager = roles.includes(ROLES.manager)
+  const isITSupportAgent = roles.includes(
+    ROLES.supportAgent,
+  )
+
+  const isEmployee = roles.includes(
+    ROLES.employee,
+  )
+
+  if (isAdmin) {
+    return [
+      {
+        label: 'Dashboard',
+        to: '/dashboard',
+        icon: LayoutDashboard,
+        end: true,
+      },
+      {
+        label: 'All tickets',
+        to: '/tickets',
+        icon: TicketCheck,
+        end: true,
+      },
+      {
+        label: 'Create ticket',
+        to: '/tickets/create',
+        icon: PlusCircle,
+        end: true,
+      },
+      {
+        label: 'Users',
+        to: '/admin/users',
+        icon: UsersRound,
+        end: true,
+      },
+    ]
+  }
+
+  if (isManager) {
+    return [
+      {
+        label: 'Dashboard',
+        to: '/dashboard',
+        icon: LayoutDashboard,
+        end: true,
+      },
+      {
+        label: 'All tickets',
+        to: '/tickets',
+        icon: TicketCheck,
+        end: true,
+      },
+    ]
+  }
+
+  if (isITSupportAgent) {
+    return [
+      {
+        label: 'Dashboard',
+        to: '/dashboard',
+        icon: LayoutDashboard,
+        end: true,
+      },
+      {
+        label: 'Assigned tickets',
+        to: '/tickets',
+        icon: TicketCheck,
+        end: true,
+      },
+    ]
+  }
+
+  if (isEmployee) {
+    return [
+      {
+        label: 'Dashboard',
+        to: '/dashboard',
+        icon: LayoutDashboard,
+        end: true,
+      },
+      {
+        label: 'Create ticket',
+        to: '/tickets/create',
+        icon: PlusCircle,
+        end: true,
+      },
+      {
+        label: 'My tickets',
+        to: '/tickets',
+        icon: TicketCheck,
+        end: true,
+      },
+    ]
+  }
+
+  return [
+    {
+      label: 'Dashboard',
+      to: '/dashboard',
+      icon: LayoutDashboard,
+      end: true,
+    },
+    {
+      label: 'Tickets',
+      to: '/tickets',
+      icon: TicketCheck,
+      end: true,
+    },
+  ]
+}
+
 function SidebarContent({
   closeSidebar,
   user,
@@ -61,8 +165,14 @@ function SidebarContent({
   const initials =
     getInitials(user?.fullName)
 
-  const primaryRole =
-    user?.roles?.[0] ?? 'Employee'
+  const roles = getRoles(user)
+
+  const roleContext = getRoleContext(user)
+
+  const primaryRole = roleContext.role
+
+  const navigation =
+    getNavigation(roles)
 
   return (
     <div className="flex h-full flex-col">
@@ -82,7 +192,7 @@ function SidebarContent({
             </p>
 
             <p className="text-[11px] text-slate-400">
-              IDS · Employee portal
+              IDS · {roleContext.portalName}
             </p>
           </div>
         </NavLink>
@@ -111,7 +221,7 @@ function SidebarContent({
               end,
             }) => (
               <NavLink
-                key={to}
+                key={label}
                 to={to}
                 end={end}
                 onClick={closeSidebar}
@@ -168,8 +278,9 @@ function SidebarContent({
   )
 }
 
-function EmployeeLayout() {
+function AppLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const {
     user,
@@ -181,8 +292,46 @@ function EmployeeLayout() {
     setSidebarOpen,
   ] = useState(false)
 
+  const [ticketSearch, setTicketSearch] =
+    useState('')
+
   const initials =
     getInitials(user?.fullName)
+
+  const roles = getRoles(user)
+
+  const isAdmin =
+    roles.includes(ROLES.admin)
+
+  const isManager =
+    roles.includes(ROLES.manager)
+
+  const isITSupportAgent =
+    roles.includes(ROLES.supportAgent)
+
+  useEffect(() => {
+    if (location.pathname !== '/tickets') {
+      return
+    }
+
+    const searchValue = new URLSearchParams(
+      location.search,
+    ).get('search')
+
+    setTicketSearch(searchValue ?? '')
+  }, [location.pathname, location.search])
+
+  function handleTicketSearch(event) {
+    event.preventDefault()
+
+    const value = ticketSearch.trim()
+
+    navigate(
+      value
+        ? `/tickets?search=${encodeURIComponent(value)}`
+        : '/tickets',
+    )
+  }
 
   function handleLogout() {
     signOut()
@@ -237,7 +386,11 @@ function EmployeeLayout() {
             <Menu size={22} />
           </button>
 
-          <div className="relative hidden w-full max-w-md sm:block">
+          <form
+            onSubmit={handleTicketSearch}
+            role="search"
+            className="relative hidden w-full max-w-md sm:block"
+          >
             <Search
               size={18}
               className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
@@ -245,10 +398,21 @@ function EmployeeLayout() {
 
             <input
               type="search"
-              placeholder="Search your tickets..."
+              value={ticketSearch}
+              onChange={(event) =>
+                setTicketSearch(event.target.value)
+              }
+              aria-label="Search tickets"
+              placeholder={
+                isAdmin || isManager
+                  ? 'Search all tickets...'
+                  : isITSupportAgent
+                    ? 'Search assigned tickets...'
+                    : 'Search your tickets...'
+              }
               className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
             />
-          </div>
+          </form>
 
           <div className="ml-auto flex items-center gap-3">
             <NotificationCenter />
@@ -263,11 +427,28 @@ function EmployeeLayout() {
         </header>
 
         <main className="mx-auto w-full max-w-[1500px] p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          <Suspense
+            fallback={(
+              <div
+                role="status"
+                className="flex min-h-[50vh] items-center justify-center text-blue-600"
+              >
+                <LoaderCircle
+                  size={28}
+                  className="animate-spin"
+                />
+                <span className="sr-only">
+                  Loading page
+                </span>
+              </div>
+            )}
+          >
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>
   )
 }
 
-export default EmployeeLayout
+export default AppLayout

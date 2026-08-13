@@ -98,6 +98,14 @@ public sealed class TicketCommandService : ITicketCommandService
                 TicketCommandError.Forbidden);
         }
 
+        if (!isAdmin && ticket.StatusId is
+            TicketStatusIds.Closed or
+            TicketStatusIds.Cancelled)
+        {
+            return TicketCommandResult.Failure(
+                TicketCommandError.TicketIsFinal);
+        }
+
         var categoryExists = await _dbContext.Categories
             .AnyAsync(
                 category =>
@@ -160,6 +168,14 @@ public sealed class TicketCommandService : ITicketCommandService
         {
             return TicketCommandResult.Failure(
                 TicketCommandError.Forbidden);
+        }
+
+        if (!isAdmin && ticket.StatusId is
+            TicketStatusIds.Closed or
+            TicketStatusIds.Cancelled)
+        {
+            return TicketCommandResult.Failure(
+                TicketCommandError.TicketIsFinal);
         }
 
         var now = DateTime.UtcNow;

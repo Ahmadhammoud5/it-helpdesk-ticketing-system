@@ -117,8 +117,9 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketNotFound);
         }
 
-        if (!CanAccessTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -196,8 +197,9 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketNotFound);
         }
 
-        if (!CanAccessTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -453,8 +455,9 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketNotFound);
         }
 
-        if (!CanAccessTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -542,8 +545,9 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketNotFound);
         }
 
-        if (!CanAccessTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -939,29 +943,6 @@ public sealed class TicketAttachmentService
                     })
             .SingleOrDefaultAsync(
                 cancellationToken);
-    }
-
-    private static bool CanAccessTicket(
-        TicketAccessInfo ticket,
-        int currentUserId,
-        bool isAdmin,
-        bool isManager,
-        bool isITSupportAgent)
-    {
-        if (isAdmin || isManager)
-        {
-            return true;
-        }
-
-        if (ticket.CreatedByUserId ==
-            currentUserId)
-        {
-            return true;
-        }
-
-        return isITSupportAgent &&
-               ticket.AssignedToUserId ==
-               currentUserId;
     }
 
     private string? GetSafeFullPath(

@@ -226,7 +226,7 @@ function CreateTicketPage() {
           className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-600"
         >
           <ArrowLeft size={17} />
-          Back to my tickets
+          Back to tickets
         </Link>
 
         <div className="mt-5">

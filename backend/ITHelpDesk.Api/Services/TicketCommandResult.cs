@@ -7,6 +7,7 @@ public enum TicketCommandError
     None,
     TicketNotFound,
     Forbidden,
+    TicketIsFinal,
     CategoryNotFound,
     PriorityNotFound
 }

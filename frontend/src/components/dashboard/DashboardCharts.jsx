@@ -46,7 +46,7 @@ function DashboardCharts({ charts }) {
         </h2>
 
         <p className="mt-1 text-sm text-slate-500">
-          Visual breakdown of your support requests.
+          Visual breakdown of the tickets in your current view.
         </p>
       </div>
 

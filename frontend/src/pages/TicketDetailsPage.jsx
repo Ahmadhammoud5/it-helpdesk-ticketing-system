@@ -56,7 +56,11 @@ import {
   uploadTicketAttachments,
 } from '../api/ticketApi'
 import { getStatuses } from '../api/lookupApi'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
+import {
+  getRoleContext,
+  ROLES,
+} from '../auth/roles'
 
 const statusStyles = {
   Open:
@@ -476,18 +480,17 @@ function TicketDetailsPage() {
 
   const roles = user?.roles ?? []
   const currentUserId = Number(user?.userId)
+  const roleContext = getRoleContext(user)
 
-  const isAdmin = roles.includes('Admin')
-  const isManager = roles.includes('Manager')
+  const isAdmin = roles.includes(ROLES.admin)
+  const isManager = roles.includes(ROLES.manager)
   const isAgent = roles.includes(
-    'ITSupportAgent',
+    ROLES.supportAgent,
   )
+  const isEmployee = roles.includes(ROLES.employee)
 
   const canManageAssignments =
     isAdmin || isManager
-
-  const canCreateInternalNote =
-    isAdmin || isManager || isAgent
 
   const isFinalTicket =
     ticket?.statusName === 'Closed' ||
@@ -501,6 +504,13 @@ function TicketDetailsPage() {
     ticket &&
     isAgent &&
     currentUserId === ticket.assignedToUserId
+
+  const canCreateInternalNote =
+    isAdmin || isManager || isAssignedAgent
+
+  const canEditTicket =
+    isAdmin ||
+    (isEmployee && isOwner && !isFinalTicket)
 
   const canManageFullWorkflow =
     isAdmin ||
@@ -519,7 +529,7 @@ function TicketDetailsPage() {
       return transitionIds
     }
 
-    if (isOwner) {
+    if (isEmployee && isOwner) {
       return transitionIds.filter(
         (statusId) => statusId === 6,
       )
@@ -529,6 +539,7 @@ function TicketDetailsPage() {
   }, [
     ticket,
     canManageFullWorkflow,
+    isEmployee,
     isOwner,
   ])
 
@@ -1424,7 +1435,7 @@ function TicketDetailsPage() {
           className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
         >
           <ArrowLeft size={17} />
-          Return to my tickets
+          Return to {roleContext.ticketsLinkLabel}
         </Link>
       </section>
     )
@@ -1519,7 +1530,7 @@ function TicketDetailsPage() {
             className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-600"
           >
             <ArrowLeft size={17} />
-            Back to my tickets
+            Back to {roleContext.ticketsLinkLabel}
           </Link>
 
           <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
@@ -1581,25 +1592,29 @@ function TicketDetailsPage() {
                 </button>
               )}
 
-              <Link
-                to={`/tickets/${ticket.id}/edit`}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-              >
-                <Edit3 size={17} />
-                Edit ticket
-              </Link>
+              {canEditTicket && (
+                <>
+                  <Link
+                    to={`/tickets/${ticket.id}/edit`}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    <Edit3 size={17} />
+                    Edit ticket
+                  </Link>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteError('')
-                  setDeleteModalOpen(true)
-                }}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
-              >
-                <Trash2 size={17} />
-                Delete
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError('')
+                      setDeleteModalOpen(true)
+                    }}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                  >
+                    <Trash2 size={17} />
+                    Delete
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -2710,7 +2725,7 @@ function TicketDetailsPage() {
                         clearAssignmentMessages()
                       }}
                       rows={3}
-                      maxLength={1000}
+                      maxLength={255}
                       disabled={
                         isFinalTicket ||
                         assignmentOperationRunning
@@ -2723,7 +2738,7 @@ function TicketDetailsPage() {
                       {
                         assignmentReason.length
                       }
-                      /1000
+                      /255
                     </p>
                   </div>
 
@@ -3035,7 +3050,7 @@ function TicketDetailsPage() {
               to="/tickets"
               className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:text-blue-700"
             >
-              View all my tickets
+              View {roleContext.ticketsLinkLabel}
               <ChevronRight size={18} />
             </Link>
           </aside>

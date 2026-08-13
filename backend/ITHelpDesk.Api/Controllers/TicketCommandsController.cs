@@ -21,6 +21,10 @@ public sealed class TicketCommandsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(
+        Roles =
+            SystemRoles.Admin + "," +
+            SystemRoles.Employee)]
     public async Task<IActionResult> CreateTicket(
         [FromBody] CreateTicketRequest request,
         CancellationToken cancellationToken)
@@ -56,6 +60,10 @@ public sealed class TicketCommandsController : ControllerBase
     }
 
     [HttpPut("{ticketId:int}")]
+    [Authorize(
+        Roles =
+            SystemRoles.Admin + "," +
+            SystemRoles.Employee)]
     public async Task<IActionResult> UpdateTicket(
         int ticketId,
         [FromBody] UpdateTicketRequest request,
@@ -95,6 +103,10 @@ public sealed class TicketCommandsController : ControllerBase
     }
 
     [HttpDelete("{ticketId:int}")]
+    [Authorize(
+        Roles =
+            SystemRoles.Admin + "," +
+            SystemRoles.Employee)]
     public async Task<IActionResult> DeleteTicket(
         int ticketId,
         CancellationToken cancellationToken)
@@ -157,6 +169,13 @@ public sealed class TicketCommandsController : ControllerBase
                         message =
                             "You are not authorized to modify this ticket."
                     }),
+
+            TicketCommandError.TicketIsFinal =>
+                Conflict(new
+                {
+                    message =
+                        "Closed or cancelled tickets cannot be modified."
+                }),
 
             TicketCommandError.CategoryNotFound =>
                 BadRequest(new

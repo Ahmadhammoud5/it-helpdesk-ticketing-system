@@ -1,14 +1,21 @@
 import { Navigate, createBrowserRouter } from 'react-router'
 
 import ProtectedRoute from '../auth/ProtectedRoute'
-import EmployeeLayout from '../components/layout/EmployeeLayout'
+import {
+  ROLES,
+  TICKET_AUTHOR_ROLES,
+} from '../auth/roles'
+import AppLayout from '../components/layout/EmployeeLayout'
 import LoginPage from '../pages/LoginPage'
 import ForgotPasswordPage from '../pages/ForgotPasswordPage'
-import DashboardPage from '../pages/DashboardPage'
-import CreateTicketPage from '../pages/CreateTicketPage'
-import MyTicketsPage from '../pages/MyTicketsPage'
-import TicketDetailsPage from '../pages/TicketDetailsPage'
-import EditTicketPage from '../pages/EditTicketPage'
+import {
+  CreateTicketPage,
+  DashboardPage,
+  EditTicketPage,
+  MyTicketsPage,
+  TicketDetailsPage,
+  UsersPage,
+} from './lazyPages'
 
 const router = createBrowserRouter([
   {
@@ -26,7 +33,7 @@ const router = createBrowserRouter([
   {
     element: (
       <ProtectedRoute>
-        <EmployeeLayout />
+        <AppLayout />
       </ProtectedRoute>
     ),
     children: [
@@ -40,7 +47,11 @@ const router = createBrowserRouter([
       },
       {
         path: '/tickets/create',
-        element: <CreateTicketPage />,
+        element: (
+          <ProtectedRoute allowedRoles={TICKET_AUTHOR_ROLES}>
+            <CreateTicketPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: '/tickets/:ticketId',
@@ -48,7 +59,19 @@ const router = createBrowserRouter([
       },
       {
         path: '/tickets/:ticketId/edit',
-        element: <EditTicketPage />,
+        element: (
+          <ProtectedRoute allowedRoles={TICKET_AUTHOR_ROLES}>
+            <EditTicketPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/admin/users',
+        element: (
+          <ProtectedRoute allowedRoles={[ROLES.admin]}>
+            <UsersPage />
+          </ProtectedRoute>
+        ),
       },
     ],
   },

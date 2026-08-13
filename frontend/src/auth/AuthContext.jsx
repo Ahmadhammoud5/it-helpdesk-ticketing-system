@@ -1,6 +1,4 @@
 import {
-  createContext,
-  useContext,
   useMemo,
   useState,
 } from 'react'
@@ -16,8 +14,7 @@ import {
   getAuthProfile,
   saveAuthProfile,
 } from './authStorage'
-
-const AuthContext = createContext(null)
+import { AuthContext } from './authContextValue'
 
 function getInitialUser() {
   const profile = getAuthProfile()
@@ -90,14 +87,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-
-  if (!context) {
-    throw new Error('useAuth must be used inside AuthProvider.')
-  }
-
-  return context
 }

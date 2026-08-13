@@ -8,12 +8,20 @@ public interface ITicketQueryService
     Task<IReadOnlyList<TicketResponse>> GetTicketsAsync(
         int userId,
         bool isAdmin,
+        bool isManager,
+        bool isITSupportAgent,
         CancellationToken cancellationToken = default);
 
     Task<TicketResponse?> GetTicketByIdAsync(
         int ticketId,
         int userId,
         bool isAdmin,
+        bool isManager,
+        bool isITSupportAgent,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> TicketExistsAsync(
+        int ticketId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CategoryResponse>> GetCategoriesAsync(

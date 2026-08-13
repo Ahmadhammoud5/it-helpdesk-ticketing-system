@@ -1,5 +1,7 @@
+using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.DTOs.Dashboard;
+using ITHelpDesk.Api.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace ITHelpDesk.Api.Services;
@@ -18,17 +20,16 @@ public sealed class DashboardService : IDashboardService
         GetSummaryAsync(
             int userId,
             bool isAdmin,
+            bool isManager,
+            bool isITSupportAgent,
             CancellationToken cancellationToken = default)
     {
-        var query = _dbContext.Tickets
-            .AsNoTracking();
-
-        if (!isAdmin)
-        {
-            query = query.Where(
-                ticket =>
-                    ticket.CreatedByUserId == userId);
-        }
+        var query = ApplyVisibility(
+            _dbContext.Tickets.AsNoTracking(),
+            userId,
+            isAdmin,
+            isManager,
+            isITSupportAgent);
 
         var totalTickets =
             await query.CountAsync(
@@ -37,30 +38,30 @@ public sealed class DashboardService : IDashboardService
         var openTickets =
             await query.CountAsync(
                 ticket =>
-                    ticket.Status.StatusName == "Open",
+                    ticket.StatusId == TicketStatusIds.Open,
                 cancellationToken);
 
         var inProgressTickets =
             await query.CountAsync(
                 ticket =>
-                    ticket.Status.StatusName ==
-                    "In Progress",
+                    ticket.StatusId ==
+                    TicketStatusIds.InProgress,
                 cancellationToken);
 
         var pendingTickets =
             await query.CountAsync(
                 ticket =>
-                    ticket.Status.StatusName ==
-                    "Pending",
+                    ticket.StatusId ==
+                    TicketStatusIds.Pending,
                 cancellationToken);
 
         var resolvedTickets =
             await query.CountAsync(
                 ticket =>
-                    ticket.Status.StatusName ==
-                    "Resolved" ||
-                    ticket.Status.StatusName ==
-                    "Closed",
+                    ticket.StatusId ==
+                    TicketStatusIds.Resolved ||
+                    ticket.StatusId ==
+                    TicketStatusIds.Closed,
                 cancellationToken);
 
         return new DashboardSummaryResponse
@@ -80,17 +81,16 @@ public sealed class DashboardService : IDashboardService
         GetChartsAsync(
             int userId,
             bool isAdmin,
+            bool isManager,
+            bool isITSupportAgent,
             CancellationToken cancellationToken = default)
     {
-        var query = _dbContext.Tickets
-            .AsNoTracking();
-
-        if (!isAdmin)
-        {
-            query = query.Where(
-                ticket =>
-                    ticket.CreatedByUserId == userId);
-        }
+        var query = ApplyVisibility(
+            _dbContext.Tickets.AsNoTracking(),
+            userId,
+            isAdmin,
+            isManager,
+            isITSupportAgent);
 
         var ticketsByStatus =
             await query
@@ -166,5 +166,27 @@ public sealed class DashboardService : IDashboardService
             TicketsByPriority = ticketsByPriority,
             TicketsByCategory = ticketsByCategory
         };
+    }
+
+    private static IQueryable<Ticket> ApplyVisibility(
+        IQueryable<Ticket> query,
+        int userId,
+        bool isAdmin,
+        bool isManager,
+        bool isITSupportAgent)
+    {
+        if (isAdmin || isManager)
+        {
+            return query;
+        }
+
+        if (isITSupportAgent)
+        {
+            return query.Where(ticket =>
+                ticket.AssignedToUserId == userId);
+        }
+
+        return query.Where(ticket =>
+            ticket.CreatedByUserId == userId);
     }
 }

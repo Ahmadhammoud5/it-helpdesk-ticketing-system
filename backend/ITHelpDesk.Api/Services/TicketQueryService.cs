@@ -10,7 +10,8 @@ public sealed class TicketQueryService : ITicketQueryService
 {
     private readonly ApplicationDbContext _dbContext;
 
-    public TicketQueryService(ApplicationDbContext dbContext)
+    public TicketQueryService(
+        ApplicationDbContext dbContext)
     {
         _dbContext = dbContext;
     }
@@ -18,16 +19,19 @@ public sealed class TicketQueryService : ITicketQueryService
     public async Task<IReadOnlyList<TicketResponse>> GetTicketsAsync(
         int userId,
         bool isAdmin,
+        bool isManager,
+        bool isITSupportAgent,
         CancellationToken cancellationToken = default)
     {
         var query = _dbContext.Tickets
             .AsNoTracking();
 
-        if (!isAdmin)
-        {
-            query = query.Where(
-                ticket => ticket.CreatedByUserId == userId);
-        }
+        query = ApplyVisibility(
+            query,
+            userId,
+            isAdmin,
+            isManager,
+            isITSupportAgent);
 
         return await ProjectToResponse(query)
             .OrderByDescending(ticket => ticket.CreatedDate)
@@ -39,20 +43,34 @@ public sealed class TicketQueryService : ITicketQueryService
         int ticketId,
         int userId,
         bool isAdmin,
+        bool isManager,
+        bool isITSupportAgent,
         CancellationToken cancellationToken = default)
     {
         var query = _dbContext.Tickets
             .AsNoTracking()
             .Where(ticket => ticket.Id == ticketId);
 
-        if (!isAdmin)
-        {
-            query = query.Where(
-                ticket => ticket.CreatedByUserId == userId);
-        }
+        query = ApplyVisibility(
+            query,
+            userId,
+            isAdmin,
+            isManager,
+            isITSupportAgent);
 
         return await ProjectToResponse(query)
             .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<bool> TicketExistsAsync(
+        int ticketId,
+        CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Tickets
+            .AsNoTracking()
+            .AnyAsync(
+                ticket => ticket.Id == ticketId,
+                cancellationToken);
     }
 
     public async Task<IReadOnlyList<CategoryResponse>> GetCategoriesAsync(
@@ -105,6 +123,28 @@ public sealed class TicketQueryService : ITicketQueryService
                 IsFinal = status.IsFinal
             })
             .ToListAsync(cancellationToken);
+    }
+
+    private static IQueryable<Ticket> ApplyVisibility(
+        IQueryable<Ticket> query,
+        int userId,
+        bool isAdmin,
+        bool isManager,
+        bool isITSupportAgent)
+    {
+        if (isAdmin || isManager)
+        {
+            return query;
+        }
+
+        if (isITSupportAgent)
+        {
+            return query.Where(ticket =>
+                ticket.AssignedToUserId == userId);
+        }
+
+        return query.Where(ticket =>
+            ticket.CreatedByUserId == userId);
     }
 
     private static IQueryable<TicketResponse> ProjectToResponse(

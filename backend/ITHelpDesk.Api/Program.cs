@@ -233,6 +233,47 @@ builder.Services
                 }
 
                 return Task.CompletedTask;
+            },
+            OnTokenValidated = async context =>
+            {
+                var userIdValue = context.Principal?
+                    .FindFirstValue(ClaimTypes.NameIdentifier);
+
+                if (!int.TryParse(userIdValue, out var userId))
+                {
+                    context.Fail(
+                        "The token user identifier is invalid.");
+                    return;
+                }
+
+                var userManager = context.HttpContext
+                    .RequestServices
+                    .GetRequiredService<
+                        UserManager<ApplicationUser>>();
+
+                var user = await userManager.FindByIdAsync(
+                    userId.ToString());
+
+                if (user is null || !user.IsActive)
+                {
+                    context.Fail(
+                        "The token user account is unavailable.");
+                    return;
+                }
+
+                var currentRoles =
+                    await userManager.GetRolesAsync(user);
+
+                var tokenRoles = context.Principal!
+                    .FindAll(ClaimTypes.Role)
+                    .Select(claim => claim.Value)
+                    .ToHashSet(StringComparer.Ordinal);
+
+                if (!tokenRoles.SetEquals(currentRoles))
+                {
+                    context.Fail(
+                        "The token roles are no longer current.");
+                }
             }
         };
     });

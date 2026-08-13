@@ -34,6 +34,7 @@ function NotificationCenter() {
   const navigate = useNavigate()
 
   const containerRef = useRef(null)
+  const notificationIdsRef = useRef(new Set())
 
   const [notifications, setNotifications] =
     useState([])
@@ -69,12 +70,23 @@ function NotificationCenter() {
           return
         }
 
-        setNotifications(
-          result.notifications ?? [],
+        const loadedNotifications =
+          Array.isArray(result.notifications)
+            ? result.notifications
+            : []
+
+        notificationIdsRef.current = new Set(
+          loadedNotifications.map(
+            (notification) => notification.id,
+          ),
         )
 
+        setNotifications(loadedNotifications)
+
         setUnreadCount(
-          result.unreadCount ?? 0,
+          Number.isFinite(result.unreadCount)
+            ? result.unreadCount
+            : 0,
         )
       } catch {
         if (active) {
@@ -95,6 +107,15 @@ function NotificationCenter() {
               return
             }
 
+            const isNewNotification =
+              !notificationIdsRef.current.has(
+                notification.id,
+              )
+
+            notificationIdsRef.current.add(
+              notification.id,
+            )
+
             setNotifications(
               (currentNotifications) => {
                 const withoutDuplicate =
@@ -110,7 +131,10 @@ function NotificationCenter() {
               },
             )
 
-            if (!notification.isRead) {
+            if (
+              isNewNotification &&
+              !notification.isRead
+            ) {
               setUnreadCount(
                 (currentCount) =>
                   currentCount + 1,
@@ -152,15 +176,29 @@ function NotificationCenter() {
       }
     }
 
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
     document.addEventListener(
       'mousedown',
       handleClickOutside,
+    )
+    document.addEventListener(
+      'keydown',
+      handleEscape,
     )
 
     return () => {
       document.removeEventListener(
         'mousedown',
         handleClickOutside,
+      )
+      document.removeEventListener(
+        'keydown',
+        handleEscape,
       )
     }
   }, [])
@@ -256,13 +294,19 @@ function NotificationCenter() {
           setIsOpen((current) => !current)
         }
         className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-        aria-label="Notifications"
+        aria-label={
+          unreadCount === 0
+            ? 'Notifications'
+            : `Notifications, ${unreadCount} unread`
+        }
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
         title="Notifications"
       >
         <Bell size={18} />
 
         {unreadCount > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
+          <span aria-hidden="true" className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
             {unreadCount > 99
               ? '99+'
               : unreadCount}
@@ -271,7 +315,7 @@ function NotificationCenter() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-12 z-50 w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
+        <div role="dialog" aria-label="Notifications" className="absolute right-0 top-12 z-50 w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
             <div>
               <h2 className="font-bold text-slate-900">

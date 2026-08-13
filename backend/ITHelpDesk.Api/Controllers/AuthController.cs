@@ -47,10 +47,11 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
-    [AllowAnonymous]
+    [Authorize(Roles = SystemRoles.Admin)]
     [HttpPost("register")]
     public async Task<ActionResult<RegisterResponse>> Register(
-        RegisterRequest request)
+        RegisterRequest request,
+        CancellationToken cancellationToken)
     {
         var normalizedEmail = request.Email
             .Trim()
@@ -70,9 +71,11 @@ public class AuthController : ControllerBase
         if (request.DepartmentId.HasValue)
         {
             var departmentExists = await _dbContext.Departments
-                .AnyAsync(department =>
-                    department.Id == request.DepartmentId.Value &&
-                    department.IsActive);
+                .AnyAsync(
+                    department =>
+                        department.Id == request.DepartmentId.Value &&
+                        department.IsActive,
+                    cancellationToken);
 
             if (!departmentExists)
             {

@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -27,16 +27,18 @@ public sealed class TicketQueriesController : ControllerBase
         {
             return Unauthorized(new
             {
-                message = "The authenticated user identifier is invalid."
+                message =
+                    "The authenticated user identifier is invalid."
             });
         }
 
-        var isAdmin = User.IsInRole(SystemRoles.Admin);
-
-        var tickets = await _ticketQueryService.GetTicketsAsync(
-            userId,
-            isAdmin,
-            cancellationToken);
+        var tickets =
+            await _ticketQueryService.GetTicketsAsync(
+                userId,
+                User.IsInRole(SystemRoles.Admin),
+                User.IsInRole(SystemRoles.Manager),
+                User.IsInRole(SystemRoles.ITSupportAgent),
+                cancellationToken);
 
         return Ok(tickets);
     }
@@ -50,7 +52,8 @@ public sealed class TicketQueriesController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Ticket ID must be greater than zero."
+                message =
+                    "Ticket ID must be greater than zero."
             });
         }
 
@@ -58,20 +61,35 @@ public sealed class TicketQueriesController : ControllerBase
         {
             return Unauthorized(new
             {
-                message = "The authenticated user identifier is invalid."
+                message =
+                    "The authenticated user identifier is invalid."
             });
         }
 
-        var isAdmin = User.IsInRole(SystemRoles.Admin);
-
-        var ticket = await _ticketQueryService.GetTicketByIdAsync(
-            ticketId,
-            userId,
-            isAdmin,
-            cancellationToken);
+        var ticket =
+            await _ticketQueryService.GetTicketByIdAsync(
+                ticketId,
+                userId,
+                User.IsInRole(SystemRoles.Admin),
+                User.IsInRole(SystemRoles.Manager),
+                User.IsInRole(SystemRoles.ITSupportAgent),
+                cancellationToken);
 
         if (ticket is null)
         {
+            if (await _ticketQueryService.TicketExistsAsync(
+                    ticketId,
+                    cancellationToken))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        message =
+                            "You are not authorized to view this ticket."
+                    });
+            }
+
             return NotFound(new
             {
                 message = "Ticket was not found."
@@ -81,11 +99,15 @@ public sealed class TicketQueriesController : ControllerBase
         return Ok(ticket);
     }
 
-    private bool TryGetCurrentUserId(out int userId)
+    private bool TryGetCurrentUserId(
+        out int userId)
     {
-        var userIdValue = User.FindFirstValue(
-            ClaimTypes.NameIdentifier);
+        var userIdValue =
+            User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
 
-        return int.TryParse(userIdValue, out userId);
+        return int.TryParse(
+            userIdValue,
+            out userId);
     }
 }
