@@ -61,6 +61,11 @@ import {
   getRoleContext,
   ROLES,
 } from '../auth/roles'
+import {
+  attachmentAccept,
+  formatFileSize,
+  validateAttachmentFiles,
+} from '../utils/ticketAttachments'
 
 const statusStyles = {
   Open:
@@ -99,28 +104,6 @@ const allowedTransitions = {
   5: [],
   6: [],
 }
-
-const attachmentAccept =
-  '.png,.jpg,.jpeg,.webp,.pdf,.txt,.docx,.xlsx'
-
-const allowedAttachmentExtensions = new Set([
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.webp',
-  '.pdf',
-  '.txt',
-  '.docx',
-  '.xlsx',
-])
-
-const maxAttachmentFileSize =
-  10 * 1024 * 1024
-
-const maxAttachmentsPerUpload = 5
-
-const maxTicketAttachmentSize =
-  50 * 1024 * 1024
 
 function normalizeUtcDateValue(dateValue) {
   if (typeof dateValue !== 'string') {
@@ -180,36 +163,6 @@ function formatDuration(minutesValue) {
   }
 
   return `${hours} hr ${minutes} min`
-}
-
-function formatFileSize(bytesValue) {
-  const bytes = Number(bytesValue) || 0
-
-  if (bytes < 1024) {
-    return `${bytes} B`
-  }
-
-  const kilobytes = bytes / 1024
-
-  if (kilobytes < 1024) {
-    return `${kilobytes.toFixed(1)} KB`
-  }
-
-  const megabytes = kilobytes / 1024
-
-  return `${megabytes.toFixed(1)} MB`
-}
-
-function getFileExtension(fileName) {
-  const lastDotIndex = fileName.lastIndexOf('.')
-
-  if (lastDotIndex < 0) {
-    return ''
-  }
-
-  return fileName
-    .slice(lastDotIndex)
-    .toLowerCase()
 }
 
 function getTimelineTitle(item) {
@@ -318,6 +271,13 @@ function TicketDetailsPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
+  const [creationNotice] = useState(() => ({
+    ticketId,
+    ticketCreated:
+      location.state?.ticketCreated === true,
+    attachmentUploadError:
+      location.state?.attachmentUploadError ?? '',
+  }))
 
   const [ticket, setTicket] = useState(null)
   const [statuses, setStatuses] = useState([])
@@ -476,7 +436,10 @@ function TicketDetailsPage() {
     useState('')
 
   const ticketCreated =
-    location.state?.ticketCreated === true
+    creationNotice.ticketId === ticketId &&
+    creationNotice.ticketCreated
+  const attachmentUploadError =
+    creationNotice.attachmentUploadError
 
   const roles = user?.roles ?? []
   const currentUserId = Number(user?.userId)
@@ -1187,54 +1150,6 @@ function TicketDetailsPage() {
 
     clearAttachmentMessages()
 
-    if (
-      files.length >
-      maxAttachmentsPerUpload
-    ) {
-      setSelectedFiles([])
-      event.target.value = ''
-
-      setAttachmentError(
-        'Select no more than 5 files at once.',
-      )
-
-      return
-    }
-
-    const invalidTypeFile = files.find(
-      (file) =>
-        !allowedAttachmentExtensions.has(
-          getFileExtension(file.name),
-        ),
-    )
-
-    if (invalidTypeFile) {
-      setSelectedFiles([])
-      event.target.value = ''
-
-      setAttachmentError(
-        `${invalidTypeFile.name} has an unsupported file type.`,
-      )
-
-      return
-    }
-
-    const oversizedFile = files.find(
-      (file) =>
-        file.size > maxAttachmentFileSize,
-    )
-
-    if (oversizedFile) {
-      setSelectedFiles([])
-      event.target.value = ''
-
-      setAttachmentError(
-        `${oversizedFile.name} exceeds the 10 MB file limit.`,
-      )
-
-      return
-    }
-
     const currentStoredSize =
       attachments.reduce(
         (total, attachment) =>
@@ -1245,22 +1160,17 @@ function TicketDetailsPage() {
         0,
       )
 
-    const selectedSize = files.reduce(
-      (total, file) =>
-        total + file.size,
-      0,
-    )
+    const validationError =
+      validateAttachmentFiles(
+        files,
+        currentStoredSize,
+      )
 
-    if (
-      currentStoredSize + selectedSize >
-      maxTicketAttachmentSize
-    ) {
+    if (validationError) {
       setSelectedFiles([])
       event.target.value = ''
 
-      setAttachmentError(
-        'These files would exceed the 50 MB attachment limit for this ticket.',
-      )
+      setAttachmentError(validationError)
 
       return
     }
@@ -1471,7 +1381,7 @@ function TicketDetailsPage() {
   return (
     <>
       <div className="space-y-6">
-        {ticketCreated && (
+        {ticketCreated && !attachmentUploadError && (
           <section className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <CheckCircle2
               size={21}
@@ -1487,6 +1397,29 @@ function TicketDetailsPage() {
                 Your support request was
                 saved and sent to the IT
                 team.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {ticketCreated && attachmentUploadError && (
+          <section
+            role="alert"
+            className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4"
+          >
+            <AlertTriangle
+              size={21}
+              className="mt-0.5 shrink-0 text-amber-600"
+            />
+
+            <div>
+              <p className="text-sm font-bold text-amber-900">
+                Ticket created successfully, but some
+                attachments could not be uploaded.
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                {attachmentUploadError}
               </p>
             </div>
           </section>

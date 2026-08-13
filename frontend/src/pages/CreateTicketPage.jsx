@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import {
@@ -18,13 +19,22 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  X,
 } from 'lucide-react'
 
-import { createTicket } from '../api/ticketApi'
+import {
+  createTicket,
+  uploadTicketAttachments,
+} from '../api/ticketApi'
 import {
   getCategories,
   getPriorities,
 } from '../api/lookupApi'
+import {
+  attachmentAccept,
+  formatFileSize,
+  validateAttachmentFiles,
+} from '../utils/ticketAttachments'
 
 const initialForm = {
   title: '',
@@ -35,10 +45,17 @@ const initialForm = {
 
 function CreateTicketPage() {
   const navigate = useNavigate()
+  const submittingRef = useRef(false)
 
   const [form, setForm] = useState(initialForm)
   const [categories, setCategories] = useState([])
   const [priorities, setPriorities] = useState([])
+  const [selectedFiles, setSelectedFiles] =
+    useState([])
+  const [attachmentInputKey, setAttachmentInputKey] =
+    useState(0)
+  const [attachmentError, setAttachmentError] =
+    useState('')
 
   const [errors, setErrors] = useState({})
   const [pageError, setPageError] = useState('')
@@ -143,14 +160,70 @@ function CreateTicketPage() {
     return validationErrors
   }
 
+  function handleAttachmentSelection(event) {
+    const files = Array.from(
+      event.target.files ?? [],
+    )
+    const validationError =
+      validateAttachmentFiles(files)
+
+    setAttachmentError(validationError)
+
+    if (validationError) {
+      setSelectedFiles([])
+      event.target.value = ''
+      return
+    }
+
+    setSelectedFiles(files)
+    setSubmitError('')
+  }
+
+  function removeSelectedFile(indexToRemove) {
+    setSelectedFiles((currentFiles) =>
+      currentFiles.filter(
+        (_, index) => index !== indexToRemove,
+      ),
+    )
+    setAttachmentInputKey(
+      (currentKey) => currentKey + 1,
+    )
+    setAttachmentError('')
+  }
+
+  function getAttachmentUploadError(requestError) {
+    const status = requestError.response?.status
+    const serverMessage =
+      requestError.response?.data?.message
+
+    if (
+      status >= 400 &&
+      status < 500 &&
+      serverMessage
+    ) {
+      return serverMessage
+    }
+
+    return 'The selected attachments could not be uploaded. You can try again from the ticket details page.'
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
 
+    if (submittingRef.current) {
+      return
+    }
+
     const validationErrors =
       validateForm()
+    const fileValidationError =
+      validateAttachmentFiles(selectedFiles)
+
+    setAttachmentError(fileValidationError)
 
     if (
-      Object.keys(validationErrors).length > 0
+      Object.keys(validationErrors).length > 0 ||
+      fileValidationError
     ) {
       setErrors(validationErrors)
       return
@@ -158,11 +231,14 @@ function CreateTicketPage() {
 
     setErrors({})
     setSubmitError('')
+    submittingRef.current = true
     setSubmitting(true)
 
     try {
-      const createdTicket =
-        await createTicket({
+      let createdTicket
+
+      try {
+        createdTicket = await createTicket({
           title: form.title.trim(),
           description:
             form.description.trim(),
@@ -171,6 +247,48 @@ function CreateTicketPage() {
           priorityId:
             Number(form.priorityId),
         })
+      } catch (requestError) {
+        const backendErrors =
+          requestError.response?.data?.errors
+
+        if (backendErrors) {
+          const firstBackendError =
+            Object.values(backendErrors)
+              .flat()
+              .find(Boolean)
+
+          setSubmitError(
+            firstBackendError ??
+              'The ticket could not be created.',
+          )
+        } else {
+          setSubmitError(
+            requestError.response?.data?.message ??
+              'Unable to create the ticket. Check the information and try again.',
+          )
+        }
+
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth',
+        })
+
+        return
+      }
+
+      let attachmentUploadError = ''
+
+      if (selectedFiles.length > 0) {
+        try {
+          await uploadTicketAttachments(
+            createdTicket.id,
+            selectedFiles,
+          )
+        } catch (requestError) {
+          attachmentUploadError =
+            getAttachmentUploadError(requestError)
+        }
+      }
 
       navigate(
         `/tickets/${createdTicket.id}`,
@@ -178,35 +296,12 @@ function CreateTicketPage() {
           replace: true,
           state: {
             ticketCreated: true,
+            attachmentUploadError,
           },
         },
       )
-    } catch (requestError) {
-      const backendErrors =
-        requestError.response?.data?.errors
-
-      if (backendErrors) {
-        const firstBackendError =
-          Object.values(backendErrors)
-            .flat()
-            .find(Boolean)
-
-        setSubmitError(
-          firstBackendError ??
-            'The ticket could not be created.',
-        )
-      } else {
-        setSubmitError(
-          requestError.response?.data?.message ??
-            'Unable to create the ticket. Check the information and try again.',
-        )
-      }
-
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      })
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -568,29 +663,122 @@ function CreateTicketPage() {
                     <h3 className="text-sm font-semibold text-slate-700">
                       Attachments
                     </h3>
-
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Week 5
-                    </span>
                   </div>
 
-                  <div className="flex min-h-36 cursor-not-allowed flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 text-center opacity-75">
-                    <Paperclip
-                      size={24}
-                      className="text-slate-400"
-                    />
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">
+                          Add supporting files
+                        </p>
 
-                    <p className="mt-3 text-sm font-semibold text-slate-600">
-                      File uploads are coming soon
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          Add screenshots, documents,
+                          logs, or other supporting
+                          files.
+                        </p>
+                      </div>
+
+                      <label
+                        className={[
+                          'inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 text-sm font-semibold text-blue-700 transition',
+                          submitting
+                            ? 'cursor-not-allowed opacity-60'
+                            : 'cursor-pointer hover:bg-blue-50',
+                        ].join(' ')}
+                      >
+                        <Paperclip size={16} />
+                        Choose files
+
+                        <input
+                          key={attachmentInputKey}
+                          type="file"
+                          multiple
+                          accept={attachmentAccept}
+                          onChange={
+                            handleAttachmentSelection
+                          }
+                          disabled={submitting}
+                          className="sr-only"
+                        />
+                      </label>
+                    </div>
+
+                    <p className="mt-4 text-xs leading-5 text-slate-500">
+                      PNG, JPG, WEBP, PDF, TXT, DOCX,
+                      or XLSX. Maximum 5 files, 10 MB
+                      per file, and 50 MB total.
                     </p>
 
-                    <p className="mt-1 max-w-md text-xs leading-5 text-slate-400">
-                      Screenshots, logs and documents
-                      will become available after the
-                      secure attachment API is
-                      implemented.
+                    {selectedFiles.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        {selectedFiles.map(
+                          (file, index) => (
+                            <div
+                              key={`${file.name}-${file.size}-${index}`}
+                              className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5"
+                            >
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <FileText
+                                  size={16}
+                                  className="shrink-0 text-slate-400"
+                                />
+
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold text-slate-700">
+                                    {file.name}
+                                  </p>
+
+                                  <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                                    {formatFileSize(
+                                      file.size,
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeSelectedFile(
+                                    index,
+                                  )
+                                }
+                                disabled={submitting}
+                                aria-label={`Remove ${file.name}`}
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <X size={15} />
+                              </button>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+
+                    <p className="mt-4 text-xs font-medium text-slate-500">
+                      {selectedFiles.length === 0
+                        ? 'No files selected.'
+                        : `${selectedFiles.length} ${
+                            selectedFiles.length === 1
+                              ? 'file'
+                              : 'files'
+                          } selected.`}
                     </p>
                   </div>
+
+                  {attachmentError && (
+                    <div
+                      role="alert"
+                      className="mt-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
+                    >
+                      <AlertCircle
+                        size={17}
+                        className="mt-0.5 shrink-0"
+                      />
+                      {attachmentError}
+                    </div>
+                  )}
                 </section>
               </div>
 
