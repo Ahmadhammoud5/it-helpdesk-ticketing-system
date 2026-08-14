@@ -14,6 +14,7 @@ import {
   EditTicketPage,
   MyTicketsPage,
   TicketDetailsPage,
+  TeamPage,
   UsersPage,
 } from './lazyPages'
 
@@ -62,6 +63,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={TICKET_AUTHOR_ROLES}>
             <EditTicketPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/team',
+        element: (
+          <ProtectedRoute allowedRoles={[ROLES.manager]}>
+            <TeamPage />
           </ProtectedRoute>
         ),
       },

@@ -28,6 +28,11 @@ import {
   ROLES,
 } from '../../auth/roles'
 import NotificationCenter from '../notifications/NotificationCenter'
+import {
+  acquireRealtimeConnection,
+  releaseRealtimeConnection,
+  subscribeToSessionInvalidated,
+} from '../../api/notificationHub'
 
 function getInitials(fullName) {
   if (!fullName) {
@@ -96,6 +101,12 @@ function getNavigation(roles) {
         label: 'All tickets',
         to: '/tickets',
         icon: TicketCheck,
+        end: true,
+      },
+      {
+        label: 'Team',
+        to: '/team',
+        icon: UsersRound,
         end: true,
       },
     ]
@@ -310,6 +321,30 @@ function AppLayout() {
     roles.includes(ROLES.supportAgent)
 
   useEffect(() => {
+    const unsubscribe =
+      subscribeToSessionInvalidated((message) => {
+        signOut()
+
+        navigate('/login', {
+          replace: true,
+          state: { sessionMessage: message },
+        })
+      })
+
+    acquireRealtimeConnection().catch((connectionError) => {
+      console.error(
+        'Realtime connection failed.',
+        connectionError,
+      )
+    })
+
+    return () => {
+      unsubscribe()
+      releaseRealtimeConnection()
+    }
+  }, [navigate, signOut])
+
+  useEffect(() => {
     if (location.pathname !== '/tickets') {
       return
     }
@@ -326,11 +361,18 @@ function AppLayout() {
 
     const value = ticketSearch.trim()
 
-    navigate(
-      value
-        ? `/tickets?search=${encodeURIComponent(value)}`
-        : '/tickets',
-    )
+    const next = location.pathname === '/tickets'
+      ? new URLSearchParams(location.search)
+      : new URLSearchParams()
+
+    if (value) {
+      next.set('search', value)
+    } else {
+      next.delete('search')
+    }
+
+    const query = next.toString()
+    navigate(query ? `/tickets?${query}` : '/tickets')
   }
 
   function handleLogout() {

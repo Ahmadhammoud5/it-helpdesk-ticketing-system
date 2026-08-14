@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -17,7 +18,10 @@ import {
   TicketCheck,
 } from 'lucide-react'
 
-import { getTickets } from '../api/ticketApi'
+import {
+  getSupportAgents,
+  getTickets,
+} from '../api/ticketApi'
 import { useAuth } from '../auth/useAuth'
 import {
   getRoleContext,
@@ -99,10 +103,22 @@ function MyTicketsPage() {
     useSearchParams()
   const searchQuery =
     searchParams.get('search') ?? ''
+  const assignedToQuery =
+    searchParams.get('assignedTo') ?? ''
+  const assignmentQuery =
+    searchParams.get('assignment') ?? ''
+  const hasAssignmentFilter =
+    Boolean(assignedToQuery) ||
+    assignmentQuery.toLowerCase() === 'unassigned'
+  const canResolveAgents =
+    roleContext.role === ROLES.admin ||
+    roleContext.role === ROLES.manager
 
   const [tickets, setTickets] = useState([])
   const [categories, setCategories] = useState([])
   const [statuses, setStatuses] = useState([])
+  const [assignedAgentName, setAssignedAgentName] =
+    useState('')
 
   const [activeStatus, setActiveStatus] =
     useState('All')
@@ -118,7 +134,7 @@ function MyTicketsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  async function loadPageData() {
+  const loadPageData = useCallback(async () => {
     setLoading(true)
     setError('')
 
@@ -127,10 +143,17 @@ function MyTicketsPage() {
         ticketData,
         categoryData,
         statusData,
+        supportAgentData,
       ] = await Promise.all([
-        getTickets(),
+        getTickets({
+          assignedTo: assignedToQuery || undefined,
+          assignment: assignmentQuery || undefined,
+        }),
         getCategories(),
         getStatuses(),
+        assignedToQuery && canResolveAgents
+          ? getSupportAgents().catch(() => [])
+          : Promise.resolve([]),
       ])
 
       setTickets(
@@ -150,6 +173,15 @@ function MyTicketsPage() {
           ? statusData
           : [],
       )
+
+      const assignedAgent = Array.isArray(supportAgentData)
+        ? supportAgentData.find(
+            (agent) =>
+              String(agent.userId) === assignedToQuery,
+          )
+        : null
+
+      setAssignedAgentName(assignedAgent?.fullName ?? '')
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ??
@@ -158,11 +190,11 @@ function MyTicketsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [assignedToQuery, assignmentQuery, canResolveAgents])
 
   useEffect(() => {
     loadPageData()
-  }, [])
+  }, [loadPageData])
 
   useEffect(() => {
     setSearchTerm(searchQuery)
@@ -256,8 +288,30 @@ function MyTicketsPage() {
   function clearFilters() {
     setActiveStatus('All')
     setCategoryFilter('all')
-    updateTicketSearch('')
     setSortOrder('newest')
+
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.delete('search')
+        next.delete('assignedTo')
+        next.delete('assignment')
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  function clearAssignmentFilter() {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.delete('assignedTo')
+        next.delete('assignment')
+        return next
+      },
+      { replace: true },
+    )
   }
 
   const tabs = [
@@ -323,6 +377,23 @@ function MyTicketsPage() {
           >
             <RefreshCw size={16} />
             Try again
+          </button>
+        </section>
+      )}
+
+      {hasAssignmentFilter && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
+          <p className="font-semibold text-blue-800">
+            {assignedToQuery
+              ? `Assigned to: ${assignedAgentName || `Agent #${assignedToQuery}`}`
+              : 'Assignment: Unassigned active tickets'}
+          </p>
+          <button
+            type="button"
+            onClick={clearAssignmentFilter}
+            className="rounded-lg px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
+          >
+            Clear assignment filter
           </button>
         </section>
       )}
@@ -684,18 +755,18 @@ function MyTicketsPage() {
             </div>
 
             <h2 className="mt-5 text-lg font-bold text-slate-900">
-              {tickets.length === 0
+              {tickets.length === 0 && !hasAssignmentFilter
                 ? roleContext.emptyTitle
                 : 'No tickets found'}
             </h2>
 
             <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
-              {tickets.length === 0
+              {tickets.length === 0 && !hasAssignmentFilter
                 ? roleContext.emptyDescription
                 : 'Try changing the selected filters or searching with another title or reference number.'}
             </p>
 
-            {tickets.length === 0 ? (
+            {tickets.length === 0 && !hasAssignmentFilter ? (
               roleContext.canCreateTickets ? (
                 <Link
                   to="/tickets/create"

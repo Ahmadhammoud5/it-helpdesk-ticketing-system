@@ -2,6 +2,7 @@ using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.DTOs.Tickets;
 using ITHelpDesk.Api.Entities;
+using ITHelpDesk.Api.Utilities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,15 +14,18 @@ public sealed class TicketAssignmentService
     private readonly ApplicationDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly INotificationService _notificationService;
+    private readonly IPresenceService _presenceService;
 
     public TicketAssignmentService(
         ApplicationDbContext dbContext,
         UserManager<ApplicationUser> userManager,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IPresenceService presenceService)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _notificationService = notificationService;
+        _presenceService = presenceService;
     }
 
     public async Task<List<SupportAgentResponse>> GetAgentsAsync(
@@ -38,7 +42,9 @@ public sealed class TicketAssignmentService
             {
                 UserId = agent.Id,
                 FullName =
-                    $"{agent.FirstName} {agent.LastName}"
+                    $"{agent.FirstName} {agent.LastName}",
+                IsOnline = _presenceService.IsOnline(agent.Id),
+                LastSeenUtc = UtcDateTime.Normalize(agent.LastSeenUtc)
             })
             .ToList();
     }

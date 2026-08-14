@@ -13,7 +13,7 @@ import {
 } from '../../api/notificationApi'
 
 import {
-  createNotificationHubConnection,
+  subscribeToNotifications,
 } from '../../api/notificationHub'
 
 function formatNotificationDate(value) {
@@ -56,7 +56,48 @@ function NotificationCenter() {
 
   useEffect(() => {
     let active = true
-    let connection = null
+
+    const unsubscribe = subscribeToNotifications(
+      (notification) => {
+        if (!active) {
+          return
+        }
+
+        const isNewNotification =
+          !notificationIdsRef.current.has(
+            notification.id,
+          )
+
+        notificationIdsRef.current.add(
+          notification.id,
+        )
+
+        setNotifications(
+          (currentNotifications) => {
+            const withoutDuplicate =
+              currentNotifications.filter(
+                (item) =>
+                  item.id !== notification.id,
+              )
+
+            return [
+              notification,
+              ...withoutDuplicate,
+            ].slice(0, 50)
+          },
+        )
+
+        if (
+          isNewNotification &&
+          !notification.isRead
+        ) {
+          setUnreadCount(
+            (currentCount) =>
+              currentCount + 1,
+          )
+        }
+      },
+    )
 
     async function initializeNotifications() {
       try {
@@ -100,67 +141,13 @@ function NotificationCenter() {
         }
       }
 
-      connection =
-        createNotificationHubConnection(
-          (notification) => {
-            if (!active) {
-              return
-            }
-
-            const isNewNotification =
-              !notificationIdsRef.current.has(
-                notification.id,
-              )
-
-            notificationIdsRef.current.add(
-              notification.id,
-            )
-
-            setNotifications(
-              (currentNotifications) => {
-                const withoutDuplicate =
-                  currentNotifications.filter(
-                    (item) =>
-                      item.id !== notification.id,
-                  )
-
-                return [
-                  notification,
-                  ...withoutDuplicate,
-                ].slice(0, 50)
-              },
-            )
-
-            if (
-              isNewNotification &&
-              !notification.isRead
-            ) {
-              setUnreadCount(
-                (currentCount) =>
-                  currentCount + 1,
-              )
-            }
-          },
-        )
-
-      try {
-        await connection.start()
-      } catch (connectionError) {
-        console.error(
-          'Notification SignalR connection failed.',
-          connectionError,
-        )
-      }
     }
 
     initializeNotifications()
 
     return () => {
       active = false
-
-      if (connection) {
-        connection.stop().catch(() => {})
-      }
+      unsubscribe()
     }
   }, [])
 

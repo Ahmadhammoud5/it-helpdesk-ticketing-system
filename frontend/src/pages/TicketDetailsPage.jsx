@@ -56,6 +56,7 @@ import {
   uploadTicketAttachments,
 } from '../api/ticketApi'
 import { getStatuses } from '../api/lookupApi'
+import { subscribeToPresence } from '../api/notificationHub'
 import { useAuth } from '../auth/useAuth'
 import {
   getRoleContext,
@@ -66,6 +67,7 @@ import {
   formatFileSize,
   validateAttachmentFiles,
 } from '../utils/ticketAttachments'
+import { formatPresence } from '../utils/presence'
 
 const statusStyles = {
   Open:
@@ -657,6 +659,28 @@ function TicketDetailsPage() {
   useEffect(() => {
     loadPageData()
   }, [loadPageData])
+
+  useEffect(() => {
+    if (!canManageAssignments) {
+      return undefined
+    }
+
+    return subscribeToPresence((presence) => {
+      setSupportAgents((current) =>
+        current.map((agent) =>
+          agent.userId === presence.userId
+            ? {
+                ...agent,
+                isOnline: presence.isOnline,
+                lastSeenUtc:
+                  presence.lastSeenUtc ??
+                  agent.lastSeenUtc,
+              }
+            : agent,
+        ),
+      )
+    })
+  }, [canManageAssignments])
 
   useEffect(() => {
     if (!ticketCreated) {
@@ -2615,9 +2639,7 @@ function TicketDetailsPage() {
                               agent.userId
                             }
                           >
-                            {
-                              agent.fullName
-                            }
+                            {agent.fullName} — {formatPresence(agent)}
                           </option>
                         ),
                       )}

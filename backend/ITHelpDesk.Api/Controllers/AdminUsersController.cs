@@ -1,7 +1,10 @@
 using System.Security.Claims;
 using ITHelpDesk.Api.Constants;
+using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.DTOs.Admin;
 using ITHelpDesk.Api.Entities;
+using ITHelpDesk.Api.Services;
+using ITHelpDesk.Api.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -14,12 +17,21 @@ namespace ITHelpDesk.Api.Controllers;
 [Authorize(Roles = SystemRoles.Admin)]
 public class AdminUsersController : ControllerBase
 {
+    private static readonly SemaphoreSlim AdminMutationLock =
+        new(1, 1);
+
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _dbContext;
+    private readonly IPresenceService _presenceService;
 
     public AdminUsersController(
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        ApplicationDbContext dbContext,
+        IPresenceService presenceService)
     {
         _userManager = userManager;
+        _dbContext = dbContext;
+        _presenceService = presenceService;
     }
 
     [HttpGet]
@@ -27,30 +39,173 @@ public class AdminUsersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var users = await _userManager.Users
+            .AsNoTracking()
             .OrderBy(user => user.FirstName)
             .ThenBy(user => user.LastName)
             .ThenBy(user => user.Email)
             .ToListAsync(cancellationToken);
 
-        var response = new List<object>();
+        var userRoles = await (
+                from userRole in _dbContext.UserRoles.AsNoTracking()
+                join role in _dbContext.Roles.AsNoTracking()
+                    on userRole.RoleId equals role.Id
+                select new
+                {
+                    userRole.UserId,
+                    Role = role.Name!
+                })
+            .ToListAsync(cancellationToken);
 
-        foreach (var user in users)
-        {
-            var roles =
-                await _userManager.GetRolesAsync(user);
+        var rolesByUserId = userRoles
+            .GroupBy(item => item.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(item => item.Role)
+                    .OrderBy(role => role)
+                    .ToArray());
 
-            response.Add(new
+        var response = users
+            .Select(user => new AdminUserResponse
             {
-                userId = user.Id,
-                fullName =
+                UserId = user.Id,
+                FullName =
                     $"{user.FirstName} {user.LastName}",
-                email = user.Email,
-                isActive = user.IsActive,
-                roles
-            });
-        }
+                Email = user.Email,
+                IsActive = user.IsActive,
+                IsOnline = user.IsActive &&
+                    _presenceService.IsOnline(user.Id),
+                LastSeenUtc = UtcDateTime.Normalize(user.LastSeenUtc),
+                Roles = rolesByUserId.GetValueOrDefault(user.Id) ?? []
+            })
+            .ToList();
 
         return Ok(response);
+    }
+
+    [HttpPut("{userId:int}/status")]
+    public async Task<IActionResult> UpdateUserStatus(
+        int userId,
+        UpdateUserStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var requestedIsActive = request.IsActive!.Value;
+        DateTime? lastSeenUtc = null;
+        ApplicationUser? user;
+
+        await AdminMutationLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            user = await _userManager.FindByIdAsync(
+                userId.ToString());
+
+            if (user is null)
+            {
+                return NotFound(new
+                {
+                    message = "User not found."
+                });
+            }
+
+            var currentAdminIdValue = User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            if (!requestedIsActive &&
+                int.TryParse(currentAdminIdValue, out var currentAdminId) &&
+                currentAdminId == userId)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "You cannot deactivate your own account."
+                });
+            }
+
+            if (user.IsActive == requestedIsActive)
+            {
+                return Ok(new
+                {
+                    userId = user.Id,
+                    isActive = user.IsActive,
+                    lastSeenUtc = UtcDateTime.Normalize(user.LastSeenUtc),
+                    message = requestedIsActive
+                        ? "The account is already active."
+                        : "The account is already inactive."
+                });
+            }
+
+            if (!requestedIsActive &&
+                await _userManager.IsInRoleAsync(
+                    user,
+                    SystemRoles.Admin))
+            {
+                var administrators =
+                    await _userManager.GetUsersInRoleAsync(
+                        SystemRoles.Admin);
+
+                var anotherActiveAdministratorExists =
+                    administrators.Any(administrator =>
+                        administrator.Id != userId &&
+                        administrator.IsActive);
+
+                if (!anotherActiveAdministratorExists)
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            "At least one active Admin account must remain."
+                    });
+                }
+            }
+
+            user.IsActive = requestedIsActive;
+
+            if (!requestedIsActive)
+            {
+                lastSeenUtc = DateTime.UtcNow;
+                user.LastSeenUtc = lastSeenUtc;
+            }
+
+            var updateResult = await _userManager.UpdateAsync(user);
+
+            if (!updateResult.Succeeded)
+            {
+                return StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    new
+                    {
+                        message =
+                            "The account status could not be updated.",
+                        errors = updateResult.Errors.Select(
+                            error => error.Description)
+                    });
+            }
+        }
+        finally
+        {
+            AdminMutationLock.Release();
+        }
+
+        if (!requestedIsActive)
+        {
+            await _presenceService.DisconnectUserAsync(
+                userId,
+                "accountDeactivated",
+                lastSeenUtc!.Value,
+                CancellationToken.None);
+        }
+
+        return Ok(new
+        {
+            userId,
+            isActive = requestedIsActive,
+            isOnline = false,
+            lastSeenUtc = UtcDateTime.Normalize(user.LastSeenUtc),
+            message = requestedIsActive
+                ? "User account reactivated successfully."
+                : "User account deactivated successfully."
+        });
     }
 
     [HttpPost]
@@ -159,7 +314,8 @@ public class AdminUsersController : ControllerBase
     [HttpPut("{userId:int}/role")]
     public async Task<IActionResult> UpdateUserRole(
         int userId,
-        UpdateUserRoleRequest request)
+        UpdateUserRoleRequest request,
+        CancellationToken cancellationToken)
     {
         var requestedRole = request.Role.Trim();
 
@@ -178,6 +334,26 @@ public class AdminUsersController : ControllerBase
             });
         }
 
+        await AdminMutationLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            return await UpdateUserRoleCoreAsync(
+                userId,
+                validRole,
+                cancellationToken);
+        }
+        finally
+        {
+            AdminMutationLock.Release();
+        }
+    }
+
+    private async Task<IActionResult> UpdateUserRoleCoreAsync(
+        int userId,
+        string validRole,
+        CancellationToken cancellationToken)
+    {
         var user = await _userManager.FindByIdAsync(
             userId.ToString());
 
@@ -310,6 +486,25 @@ public class AdminUsersController : ControllerBase
                                 error => error.Description)
                     });
             }
+        }
+
+        if (_presenceService.IsOnline(userId))
+        {
+            var lastSeenUtc = DateTime.UtcNow;
+
+            await _dbContext.Users
+                .Where(account => account.Id == userId)
+                .ExecuteUpdateAsync(
+                    updates => updates.SetProperty(
+                        account => account.LastSeenUtc,
+                        lastSeenUtc),
+                    cancellationToken);
+
+            await _presenceService.DisconnectUserAsync(
+                userId,
+                "sessionInvalidated",
+                lastSeenUtc,
+                CancellationToken.None);
         }
 
         return Ok(new

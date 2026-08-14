@@ -23,3 +23,7 @@ export const EditTicketPage = lazy(() =>
 export const UsersPage = lazy(() =>
   import('../pages/UsersPage'),
 )
+
+export const TeamPage = lazy(() =>
+  import('../pages/TeamPage'),
+)

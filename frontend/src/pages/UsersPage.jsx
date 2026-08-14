@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CheckCircle2,
   LoaderCircle,
+  Power,
   Plus,
   RefreshCw,
   Search,
@@ -13,8 +14,15 @@ import {
   createUser,
   getUsers,
   updateUserRole,
+  updateUserStatus,
 } from '../api/adminApi'
+import {
+  subscribeToPresence,
+  subscribeToRealtimeStatus,
+} from '../api/notificationHub'
 import { ROLES } from '../auth/roles'
+import { useAuth } from '../auth/useAuth'
+import { formatPresence } from '../utils/presence'
 
 const availableRoles = [
   ROLES.admin,
@@ -69,6 +77,7 @@ function getErrorMessage(error, fallback) {
 }
 
 function UsersPage() {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [form, setForm] = useState(initialForm)
   const [searchTerm, setSearchTerm] = useState('')
@@ -76,6 +85,10 @@ function UsersPage() {
   const [creating, setCreating] = useState(false)
   const [updatingUserId, setUpdatingUserId] =
     useState(null)
+  const [updatingStatusUserId, setUpdatingStatusUserId] =
+    useState(null)
+  const [presenceUnavailable, setPresenceUnavailable] =
+    useState(true)
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
   const [success, setSuccess] = useState('')
@@ -101,6 +114,34 @@ function UsersPage() {
 
   useEffect(() => {
     loadUsers()
+  }, [])
+
+  useEffect(() => {
+    const unsubscribePresence = subscribeToPresence((presence) => {
+      setUsers((current) =>
+        current.map((item) =>
+          item.userId === presence.userId
+            ? {
+                ...item,
+                isOnline:
+                  item.isActive && presence.isOnline,
+                lastSeenUtc:
+                  presence.lastSeenUtc ??
+                  item.lastSeenUtc,
+              }
+            : item,
+        ),
+      )
+    })
+
+    const unsubscribeStatus = subscribeToRealtimeStatus(
+      (isConnected) => setPresenceUnavailable(!isConnected),
+    )
+
+    return () => {
+      unsubscribePresence()
+      unsubscribeStatus()
+    }
   }, [])
 
   const filteredUsers = useMemo(() => {
@@ -187,6 +228,58 @@ function UsersPage() {
     }
   }
 
+  async function handleStatusChange(user) {
+    const nextIsActive = !user.isActive
+    const action = nextIsActive ? 'reactivate' : 'deactivate'
+
+    if (
+      !nextIsActive &&
+      !window.confirm(
+        `Deactivate ${user.fullName}? They will be signed out and unable to use the system.`,
+      )
+    ) {
+      return
+    }
+
+    setUpdatingStatusUserId(user.userId)
+    setError('')
+    setSuccess('')
+
+    try {
+      const result = await updateUserStatus(
+        user.userId,
+        nextIsActive,
+      )
+
+      setUsers((current) =>
+        current.map((item) =>
+          item.userId === user.userId
+            ? {
+                ...item,
+                isActive: result.isActive,
+                isOnline: false,
+                lastSeenUtc:
+                  result.lastSeenUtc ?? item.lastSeenUtc,
+              }
+            : item,
+        ),
+      )
+
+      setSuccess(
+        `${user.fullName} was ${action}d successfully.`,
+      )
+    } catch (requestError) {
+      setError(
+        getErrorMessage(
+          requestError,
+          `Unable to ${action} the user.`,
+        ),
+      )
+    } finally {
+      setUpdatingStatusUserId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <section>
@@ -199,7 +292,7 @@ function UsersPage() {
         </h1>
 
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          Create accounts and maintain each user&apos;s system role.
+          Create accounts and maintain roles and account access.
         </p>
       </section>
 
@@ -402,17 +495,23 @@ function UsersPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px]">
+              <table className="w-full min-w-[980px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/70 text-left">
                     <th className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">
                       User
                     </th>
                     <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-                      Status
+                      Account
+                    </th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Presence
                     </th>
                     <th className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">
                       Role
+                    </th>
+                    <th className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Action
                     </th>
                   </tr>
                 </thead>
@@ -443,11 +542,32 @@ function UsersPage() {
                             {user.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </td>
+                        <td className="px-4 py-4">
+                          <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
+                            <span
+                              aria-hidden="true"
+                              className={[
+                                'h-2.5 w-2.5 rounded-full',
+                                user.isActive && user.isOnline
+                                  ? 'bg-emerald-500'
+                                  : 'bg-slate-300',
+                              ].join(' ')}
+                            />
+                            {user.isActive
+                              ? presenceUnavailable
+                                ? 'Status unavailable'
+                                : formatPresence(user)
+                              : 'Offline'}
+                          </span>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <select
                               value={role}
-                              disabled={updatingUserId !== null}
+                              disabled={
+                                updatingUserId !== null ||
+                                updatingStatusUserId !== null
+                              }
                               onChange={(event) =>
                                 handleRoleChange(user, event.target.value)
                               }
@@ -470,6 +590,36 @@ function UsersPage() {
                               />
                             )}
                           </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            type="button"
+                            onClick={() => handleStatusChange(user)}
+                            disabled={
+                              updatingStatusUserId !== null ||
+                              updatingUserId !== null ||
+                              Number(currentUser?.userId) === user.userId
+                            }
+                            aria-label={`${user.isActive ? 'Deactivate' : 'Reactivate'} user ${user.fullName}`}
+                            title={
+                              Number(currentUser?.userId) === user.userId
+                                ? 'You cannot deactivate your own account.'
+                                : undefined
+                            }
+                            className={[
+                              'inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50',
+                              user.isActive
+                                ? 'border-red-200 text-red-600 hover:bg-red-50'
+                                : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50',
+                            ].join(' ')}
+                          >
+                            {updatingStatusUserId === user.userId ? (
+                              <LoaderCircle size={16} className="animate-spin" />
+                            ) : (
+                              <Power size={16} />
+                            )}
+                            {user.isActive ? 'Deactivate' : 'Reactivate'}
+                          </button>
                         </td>
                       </tr>
                     )

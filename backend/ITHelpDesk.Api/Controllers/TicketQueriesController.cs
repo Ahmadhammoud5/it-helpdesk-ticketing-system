@@ -21,8 +21,43 @@ public sealed class TicketQueriesController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetTickets(
+        [FromQuery] int? assignedTo,
+        [FromQuery] string? assignment,
         CancellationToken cancellationToken)
     {
+        if (assignedTo <= 0)
+        {
+            return BadRequest(new
+            {
+                message =
+                    "Assigned support-agent ID must be greater than zero."
+            });
+        }
+
+        var unassignedOnly = string.Equals(
+            assignment,
+            "unassigned",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(assignment) &&
+            !unassignedOnly)
+        {
+            return BadRequest(new
+            {
+                message =
+                    "Assignment filter must be 'unassigned'."
+            });
+        }
+
+        if (assignedTo.HasValue && unassignedOnly)
+        {
+            return BadRequest(new
+            {
+                message =
+                    "Choose either an assigned agent or unassigned tickets, not both."
+            });
+        }
+
         if (!TryGetCurrentUserId(out var userId))
         {
             return Unauthorized(new
@@ -38,6 +73,8 @@ public sealed class TicketQueriesController : ControllerBase
                 User.IsInRole(SystemRoles.Admin),
                 User.IsInRole(SystemRoles.Manager),
                 User.IsInRole(SystemRoles.ITSupportAgent),
+                assignedTo,
+                unassignedOnly,
                 cancellationToken);
 
         return Ok(tickets);

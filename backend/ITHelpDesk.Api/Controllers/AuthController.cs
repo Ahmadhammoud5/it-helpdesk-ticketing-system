@@ -174,7 +174,8 @@ public class AuthController : ControllerBase
         {
             return Unauthorized(new
             {
-                message = "This account is inactive."
+                message =
+                    "Your account is inactive. Contact your system administrator."
             });
         }
 

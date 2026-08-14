@@ -178,6 +178,14 @@ builder.Services.AddScoped<
     INotificationService,
     NotificationService>();
 
+builder.Services.AddScoped<
+    IManagerTeamService,
+    ManagerTeamService>();
+
+builder.Services.AddSingleton<
+    IPresenceService,
+    PresenceService>();
+
 // JWT authentication
 builder.Services
     .AddAuthentication(options =>

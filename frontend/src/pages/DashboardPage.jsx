@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -19,13 +20,21 @@ import {
   getDashboardCharts,
   getDashboardSummary,
 } from '../api/dashboardApi'
-import { getTickets } from '../api/ticketApi'
+import {
+  subscribeToPresence,
+  subscribeToRealtimeStatus,
+} from '../api/notificationHub'
+import {
+  getSupportAgents,
+  getTickets,
+} from '../api/ticketApi'
 import { useAuth } from '../auth/useAuth'
 import {
   getRoleContext,
   ROLES,
 } from '../auth/roles'
 import DashboardCharts from '../components/dashboard/DashboardCharts'
+import { formatPresence } from '../utils/presence'
 
 const statusStyles = {
   Open: 'bg-blue-50 text-blue-700 ring-blue-600/10',
@@ -108,8 +117,14 @@ function DashboardSkeleton() {
 function DashboardPage() {
   const { user } = useAuth()
   const roleContext = getRoleContext(user)
+  const isManager = roleContext.role === ROLES.manager
 
   const [tickets, setTickets] = useState([])
+  const [supportAgents, setSupportAgents] = useState([])
+  const [presenceUnavailable, setPresenceUnavailable] =
+    useState(false)
+  const [realtimeUnavailable, setRealtimeUnavailable] =
+    useState(true)
 
   const [charts, setCharts] = useState({
     ticketsByStatus: [],
@@ -128,7 +143,7 @@ function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  async function loadDashboard() {
+  const loadDashboard = useCallback(async () => {
     setLoading(true)
     setError('')
 
@@ -137,10 +152,14 @@ function DashboardPage() {
         summaryData,
         chartData,
         ticketData,
+        supportAgentData,
       ] = await Promise.all([
         getDashboardSummary(),
         getDashboardCharts(),
         getTickets(),
+        isManager
+          ? getSupportAgents().catch(() => null)
+          : Promise.resolve([]),
       ])
 
       setSummary({
@@ -170,6 +189,13 @@ function DashboardPage() {
           ? ticketData
           : [],
       )
+
+      setPresenceUnavailable(supportAgentData === null)
+      setSupportAgents(
+        Array.isArray(supportAgentData)
+          ? supportAgentData
+          : [],
+      )
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ??
@@ -178,11 +204,42 @@ function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [isManager])
 
   useEffect(() => {
     loadDashboard()
-  }, [])
+  }, [loadDashboard])
+
+  useEffect(() => {
+    if (!isManager) {
+      return undefined
+    }
+
+    const unsubscribePresence = subscribeToPresence((presence) => {
+      setSupportAgents((current) =>
+        current.map((agent) =>
+          agent.userId === presence.userId
+            ? {
+                ...agent,
+                isOnline: presence.isOnline,
+                lastSeenUtc:
+                  presence.lastSeenUtc ??
+                  agent.lastSeenUtc,
+              }
+            : agent,
+        ),
+      )
+    })
+
+    const unsubscribeStatus = subscribeToRealtimeStatus(
+      (isConnected) => setRealtimeUnavailable(!isConnected),
+    )
+
+    return () => {
+      unsubscribePresence()
+      unsubscribeStatus()
+    }
+  }, [isManager])
 
   const recentTickets = useMemo(() => {
     return [...tickets]
@@ -588,22 +645,59 @@ function DashboardPage() {
 
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/50">
               <p className="text-sm font-bold text-slate-900">
-                Support availability
+                {isManager
+                  ? 'Agent availability'
+                  : 'Support availability'}
               </p>
 
-              <p className="mt-4 text-2xl font-bold text-emerald-600">
-                Online
-              </p>
+              {isManager ? (
+                presenceUnavailable || realtimeUnavailable ? (
+                  <p className="mt-4 text-sm text-slate-500">
+                    Status unavailable
+                  </p>
+                ) : supportAgents.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">
+                    No active support agents.
+                  </p>
+                ) : (
+                  <ul className="mt-4 space-y-3">
+                    {supportAgents.map((agent) => (
+                      <li
+                        key={agent.userId}
+                        className="flex items-start gap-3"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={[
+                            'mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full',
+                            agent.isOnline
+                              ? 'bg-emerald-500'
+                              : 'bg-slate-300',
+                          ].join(' ')}
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-slate-800">
+                            {agent.fullName}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            {formatPresence(agent)}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              ) : (
+                <>
+                  <p className="mt-4 text-2xl font-bold text-blue-600">
+                    Help is ready
+                  </p>
 
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                IT support is currently available and responding to
-                requests.
-              </p>
-
-              <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                Support team available
-              </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Submit and track requests through the support queue.
+                  </p>
+                </>
+              )}
             </article>
           </section>
         </>

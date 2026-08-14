@@ -22,3 +22,12 @@ export async function updateUserRole(userId, role) {
 
   return response.data
 }
+
+export async function updateUserStatus(userId, isActive) {
+  const response = await httpClient.put(
+    `/admin/users/${userId}/status`,
+    { isActive },
+  )
+
+  return response.data
+}

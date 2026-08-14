@@ -10,6 +10,8 @@ public interface ITicketQueryService
         bool isAdmin,
         bool isManager,
         bool isITSupportAgent,
+        int? assignedToUserId,
+        bool unassignedOnly,
         CancellationToken cancellationToken = default);
 
     Task<TicketResponse?> GetTicketByIdAsync(

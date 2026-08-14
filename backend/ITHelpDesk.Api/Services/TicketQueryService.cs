@@ -1,4 +1,5 @@
 using ITHelpDesk.Api.Data;
+using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.DTOs.Lookups;
 using ITHelpDesk.Api.DTOs.Tickets;
 using ITHelpDesk.Api.Entities;
@@ -21,6 +22,8 @@ public sealed class TicketQueryService : ITicketQueryService
         bool isAdmin,
         bool isManager,
         bool isITSupportAgent,
+        int? assignedToUserId,
+        bool unassignedOnly,
         CancellationToken cancellationToken = default)
     {
         var query = _dbContext.Tickets
@@ -32,6 +35,20 @@ public sealed class TicketQueryService : ITicketQueryService
             isAdmin,
             isManager,
             isITSupportAgent);
+
+        if (assignedToUserId.HasValue)
+        {
+            query = query.Where(ticket =>
+                ticket.AssignedToUserId == assignedToUserId.Value);
+        }
+        else if (unassignedOnly)
+        {
+            query = query.Where(ticket =>
+                ticket.AssignedToUserId == null &&
+                (ticket.StatusId == TicketStatusIds.Open ||
+                 ticket.StatusId == TicketStatusIds.InProgress ||
+                 ticket.StatusId == TicketStatusIds.Pending));
+        }
 
         return await ProjectToResponse(query)
             .OrderByDescending(ticket => ticket.CreatedDate)
