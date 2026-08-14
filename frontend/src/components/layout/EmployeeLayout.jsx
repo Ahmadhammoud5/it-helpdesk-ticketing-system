@@ -34,6 +34,7 @@ import {
   releaseRealtimeConnection,
   subscribeToSessionInvalidated,
 } from '../../api/notificationHub'
+import helpDeskLogo from '../../assets/it-helpdesk-logo.png'
 
 function getNavigation(roles) {
   const isAdmin = roles.includes(ROLES.admin)
@@ -176,8 +177,12 @@ function SidebarContent({
           onClick={closeSidebar}
           className="flex items-center gap-3"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white shadow-sm shadow-blue-600/20">
-            H
+          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-slate-950 shadow-sm shadow-blue-600/20">
+            <img
+              src={helpDeskLogo}
+              alt="IT HelpDesk logo"
+              className="absolute left-[-7px] top-[-36px] w-[173px] max-w-none select-none"
+            />
           </div>
 
           <div>
