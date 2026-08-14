@@ -4,6 +4,7 @@ import {
   clearAccessToken,
   getAccessToken,
 } from '../auth/tokenStorage'
+import { clearAuthProfile } from '../auth/authStorage'
 
 const httpClient = axios.create({
   baseURL: '/api',
@@ -31,6 +32,7 @@ httpClient.interceptors.response.use(
       window.location.pathname !== '/login'
     ) {
       clearAccessToken()
+      clearAuthProfile()
       window.location.assign('/login')
     }
 

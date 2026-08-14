@@ -27,10 +27,13 @@ import {
   getCategories,
   getPriorities,
 } from '../api/lookupApi'
+import { useAuth } from '../auth/useAuth'
+import { ROLES } from '../auth/roles'
 
 function EditTicketPage() {
   const { ticketId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [ticket, setTicket] = useState(null)
 
@@ -59,6 +62,13 @@ function EditTicketPage() {
     useState(false)
 
   const [saving, setSaving] = useState(false)
+
+  const isAdmin = user?.roles?.includes(ROLES.admin)
+  const isReadOnlyForEmployee =
+    !isAdmin &&
+    ['Resolved', 'Closed', 'Cancelled'].includes(
+      ticket?.statusName,
+    )
 
   const loadPage = useCallback(async () => {
     setLoading(true)
@@ -343,6 +353,34 @@ function EditTicketPage() {
           <RefreshCw size={17} />
           Try again
         </button>
+      </section>
+    )
+  }
+
+  if (isReadOnlyForEmployee) {
+    return (
+      <section className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 px-5 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-amber-600">
+          <FilePenLine size={28} />
+        </div>
+
+        <h1 className="mt-5 text-2xl font-bold text-amber-950">
+          Ticket is read-only
+        </h1>
+
+        <p className="mt-2 max-w-lg text-sm leading-6 text-amber-800">
+          This ticket is {ticket.statusName.toLowerCase()}.
+          Employees can still view it, but its submitted
+          information can no longer be edited.
+        </p>
+
+        <Link
+          to={`/tickets/${ticketId}`}
+          className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-700 px-5 text-sm font-semibold text-white transition hover:bg-amber-800"
+        >
+          <ArrowLeft size={17} />
+          Return to ticket details
+        </Link>
       </section>
     )
   }

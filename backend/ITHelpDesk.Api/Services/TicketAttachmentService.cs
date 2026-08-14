@@ -222,6 +222,17 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketIsFinal);
         }
 
+        if (ticket.StatusId == TicketStatusIds.Resolved &&
+            !isAdmin &&
+            !isManager &&
+            !isITSupportAgent)
+        {
+            return TicketAttachmentResult<
+                IReadOnlyList<TicketAttachmentResponse>>
+                .Failure(
+                    TicketAttachmentError.ResolvedIsReadOnly);
+        }
+
         if (files is null || files.Count == 0)
         {
             return TicketAttachmentResult<
@@ -576,6 +587,16 @@ public sealed class TicketAttachmentService
             return TicketAttachmentResult<bool>
                 .Failure(
                     TicketAttachmentError.TicketIsFinal);
+        }
+
+        if (ticket.StatusId == TicketStatusIds.Resolved &&
+            !isAdmin &&
+            !isManager &&
+            !isITSupportAgent)
+        {
+            return TicketAttachmentResult<bool>
+                .Failure(
+                    TicketAttachmentError.ResolvedIsReadOnly);
         }
 
         var attachment =

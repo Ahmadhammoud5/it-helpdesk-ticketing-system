@@ -27,3 +27,7 @@ export const UsersPage = lazy(() =>
 export const TeamPage = lazy(() =>
   import('../pages/TeamPage'),
 )
+
+export const ProfilePage = lazy(() =>
+  import('../pages/ProfilePage'),
+)

@@ -215,6 +215,13 @@ public sealed class TicketAttachmentsController
                         "Attachments cannot be modified after a ticket is closed or cancelled."
                 }),
 
+            TicketAttachmentError.ResolvedIsReadOnly =>
+                Conflict(new
+                {
+                    message =
+                        "Attachments are read-only after this ticket has been resolved."
+                }),
+
             TicketAttachmentError.NoFiles =>
                 BadRequest(new
                 {

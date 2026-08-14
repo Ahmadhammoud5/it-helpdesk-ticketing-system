@@ -7,6 +7,10 @@ export function getAccessToken() {
   )
 }
 
+export function isAccessTokenRemembered() {
+  return Boolean(localStorage.getItem(TOKEN_KEY))
+}
+
 export function saveAccessToken(token, rememberMe = false) {
   clearAccessToken()
 

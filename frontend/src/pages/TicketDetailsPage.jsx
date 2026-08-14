@@ -461,6 +461,17 @@ function TicketDetailsPage() {
     ticket?.statusName === 'Closed' ||
     ticket?.statusName === 'Cancelled'
 
+  const isResolvedTicket =
+    ticket?.statusName === 'Resolved'
+
+  const hasOperationalRole =
+    isAdmin || isManager || isAgent
+
+  const attachmentsAreReadOnly =
+    isFinalTicket ||
+    (ticket?.statusName === 'Resolved' &&
+      !hasOperationalRole)
+
   const isOwner =
     ticket &&
     currentUserId === ticket.createdByUserId
@@ -475,7 +486,10 @@ function TicketDetailsPage() {
 
   const canEditTicket =
     isAdmin ||
-    (isEmployee && isOwner && !isFinalTicket)
+    (isEmployee &&
+      isOwner &&
+      !isFinalTicket &&
+      !isResolvedTicket)
 
   const canManageFullWorkflow =
     isAdmin ||
@@ -1209,6 +1223,13 @@ function TicketDetailsPage() {
 
     clearAttachmentMessages()
 
+    if (attachmentsAreReadOnly) {
+      setAttachmentError(
+        'Attachments are read-only for this ticket.',
+      )
+      return
+    }
+
     if (selectedFiles.length === 0) {
       setAttachmentError(
         'Select at least one file to upload.',
@@ -1301,6 +1322,13 @@ function TicketDetailsPage() {
   async function handleDeleteAttachment(
     attachment,
   ) {
+    if (attachmentsAreReadOnly) {
+      setAttachmentError(
+        'Attachments are read-only for this ticket.',
+      )
+      return
+    }
+
     const confirmed = window.confirm(
       `Delete ${attachment.originalFileName}?`,
     )
@@ -1626,10 +1654,12 @@ function TicketDetailsPage() {
                 </span>
               </div>
 
-              {isFinalTicket ? (
+              {attachmentsAreReadOnly ? (
                 <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-600 sm:px-6">
                   Attachments are read-only because this ticket is{' '}
-                  {ticket.statusName.toLowerCase()}.
+                  {ticket.statusName === 'Resolved'
+                    ? 'resolved'
+                    : ticket.statusName.toLowerCase()}.
                 </div>
               ) : (
                 <form
@@ -1782,7 +1812,7 @@ function TicketDetailsPage() {
                   {attachments.map(
                     (attachment) => {
                       const canDeleteAttachment =
-                        !isFinalTicket &&
+                        !attachmentsAreReadOnly &&
                         (isAdmin ||
                           isManager ||
                           Number(

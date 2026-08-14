@@ -20,6 +20,8 @@ public class ApplicationUser : IdentityUser<int>
 
     public DateTime? LastSeenUtc { get; set; }
 
+    public string? ProfilePhotoFileName { get; set; }
+
     public ICollection<PasswordResetCode> PasswordResetCodes { get; set; }
         = new List<PasswordResetCode>();
 

@@ -7,6 +7,7 @@ public enum TicketAttachmentError
     AttachmentNotFound,
     Forbidden,
     TicketIsFinal,
+    ResolvedIsReadOnly,
     NoFiles,
     TooManyFiles,
     FileTooLarge,

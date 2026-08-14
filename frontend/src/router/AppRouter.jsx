@@ -13,6 +13,7 @@ import {
   DashboardPage,
   EditTicketPage,
   MyTicketsPage,
+  ProfilePage,
   TicketDetailsPage,
   TeamPage,
   UsersPage,
@@ -45,6 +46,10 @@ const router = createBrowserRouter([
       {
         path: '/tickets',
         element: <MyTicketsPage />,
+      },
+      {
+        path: '/profile',
+        element: <ProfilePage />,
       },
       {
         path: '/tickets/create',

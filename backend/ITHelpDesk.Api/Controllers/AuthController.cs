@@ -234,7 +234,10 @@ public class AuthController : ControllerBase
             UserId = user.Id,
             FullName = $"{user.FirstName} {user.LastName}",
             Email = user.Email!,
-            Roles = roles.ToArray()
+            Roles = roles.ToArray(),
+            HasProfilePhoto =
+                !string.IsNullOrWhiteSpace(
+                    user.ProfilePhotoFileName)
         });
     }
 
@@ -559,7 +562,10 @@ public class AuthController : ControllerBase
             fullName = $"{user.FirstName} {user.LastName}",
             email = user.Email,
             departmentId = user.DepartmentId,
-            roles
+            roles,
+            hasProfilePhoto =
+                !string.IsNullOrWhiteSpace(
+                    user.ProfilePhotoFileName)
         });
     }
 }

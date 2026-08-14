@@ -28,26 +28,12 @@ import {
   ROLES,
 } from '../../auth/roles'
 import NotificationCenter from '../notifications/NotificationCenter'
+import UserAvatar from '../profile/UserAvatar'
 import {
   acquireRealtimeConnection,
   releaseRealtimeConnection,
   subscribeToSessionInvalidated,
 } from '../../api/notificationHub'
-
-function getInitials(fullName) {
-  if (!fullName) {
-    return 'U'
-  }
-
-  return fullName
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) =>
-      part.charAt(0).toUpperCase(),
-    )
-    .join('')
-}
 
 function getNavigation(roles) {
   const isAdmin = roles.includes(ROLES.admin)
@@ -173,9 +159,6 @@ function SidebarContent({
   user,
   onLogout,
 }) {
-  const initials =
-    getInitials(user?.fullName)
-
   const roles = getRoles(user)
 
   const roleContext = getRoleContext(user)
@@ -258,20 +241,26 @@ function SidebarContent({
 
       <div className="border-t border-slate-200 p-4">
         <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-              {initials}
-            </div>
+          <div className="flex items-center gap-2">
+            <NavLink
+              to="/profile"
+              onClick={closeSidebar}
+              aria-label="Open your profile"
+              title="Open profile"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 transition hover:bg-white"
+            >
+              <UserAvatar user={user} />
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-slate-800">
-                {user?.fullName ?? 'User'}
-              </p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-slate-800">
+                  {user?.fullName ?? 'User'}
+                </p>
 
-              <p className="truncate text-xs text-slate-500">
-                {primaryRole}
-              </p>
-            </div>
+                <p className="truncate text-xs text-slate-500">
+                  {primaryRole}
+                </p>
+              </div>
+            </NavLink>
 
             <button
               type="button"
@@ -305,9 +294,6 @@ function AppLayout() {
 
   const [ticketSearch, setTicketSearch] =
     useState('')
-
-  const initials =
-    getInitials(user?.fullName)
 
   const roles = getRoles(user)
 
@@ -459,12 +445,15 @@ function AppLayout() {
           <div className="ml-auto flex items-center gap-3">
             <NotificationCenter />
 
-            <div
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              aria-label="Open your profile"
               title={user?.fullName}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow-sm"
+              className="rounded-full transition focus:outline-none focus:ring-4 focus:ring-blue-100"
             >
-              {initials}
-            </div>
+              <UserAvatar user={user} />
+            </button>
           </div>
         </header>
 

@@ -17,3 +17,8 @@ export async function resetPassword(details) {
   const response = await httpClient.post('/auth/reset-password', details)
   return response.data
 }
+
+export async function getCurrentUser() {
+  const response = await httpClient.get('/auth/me')
+  return response.data
+}

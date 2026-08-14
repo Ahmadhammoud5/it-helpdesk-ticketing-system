@@ -170,11 +170,11 @@ public sealed class TicketCommandsController : ControllerBase
                             "You are not authorized to modify this ticket."
                     }),
 
-            TicketCommandError.TicketIsFinal =>
+            TicketCommandError.TicketIsReadOnly =>
                 Conflict(new
                 {
                     message =
-                        "Closed or cancelled tickets cannot be modified."
+                        "Resolved, closed, or cancelled tickets cannot be modified by employees."
                 }),
 
             TicketCommandError.CategoryNotFound =>

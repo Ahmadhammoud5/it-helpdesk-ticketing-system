@@ -110,11 +110,12 @@ public sealed class TicketCommandService : ITicketCommandService
         }
 
         if (!isAdmin && ticket.StatusId is
+            TicketStatusIds.Resolved or
             TicketStatusIds.Closed or
             TicketStatusIds.Cancelled)
         {
             return TicketCommandResult.Failure(
-                TicketCommandError.TicketIsFinal);
+                TicketCommandError.TicketIsReadOnly);
         }
 
         var categoryExists = await _dbContext.Categories
@@ -182,11 +183,12 @@ public sealed class TicketCommandService : ITicketCommandService
         }
 
         if (!isAdmin && ticket.StatusId is
+            TicketStatusIds.Resolved or
             TicketStatusIds.Closed or
             TicketStatusIds.Cancelled)
         {
             return TicketCommandResult.Failure(
-                TicketCommandError.TicketIsFinal);
+                TicketCommandError.TicketIsReadOnly);
         }
 
         var now = DateTime.UtcNow;

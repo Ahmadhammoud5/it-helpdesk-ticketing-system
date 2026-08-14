@@ -14,4 +14,6 @@ public sealed class LoginResponse
 
     public IReadOnlyCollection<string> Roles { get; set; }
         = Array.Empty<string>();
+
+    public bool HasProfilePhoto { get; set; }
 }
