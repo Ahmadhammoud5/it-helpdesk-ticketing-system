@@ -8,6 +8,7 @@ using ITHelpDesk.Api.Options;
 using ITHelpDesk.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -152,6 +153,7 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("login")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Login)]
     public async Task<ActionResult<LoginResponse>> Login(
         LoginRequest request)
     {
@@ -238,6 +240,8 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("forgot-password")]
+    [EnableRateLimiting(
+        AuthRateLimitPolicies.ForgotPassword)]
     public async Task<IActionResult> ForgotPassword(
         ForgotPasswordRequest request,
         CancellationToken cancellationToken)
@@ -338,6 +342,8 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("reset-password")]
+    [EnableRateLimiting(
+        AuthRateLimitPolicies.ResetPassword)]
     public async Task<IActionResult> ResetPassword(
         ResetPasswordRequest request,
         CancellationToken cancellationToken)
@@ -437,6 +443,9 @@ public class AuthController : ControllerBase
             });
         }
 
+        var securityStampBeforeReset =
+            await _userManager.GetSecurityStampAsync(user);
+
         var identityToken =
             await _userManager.GeneratePasswordResetTokenAsync(user);
 
@@ -460,6 +469,39 @@ public class AuthController : ControllerBase
                         description = error.Description
                     })
             });
+        }
+
+        var securityStampAfterReset =
+            await _userManager.GetSecurityStampAsync(user);
+
+        // ResetPasswordAsync rotates the Identity security stamp in the
+        // standard store. This guard keeps session invalidation reliable
+        // if the password-store behavior is customized in the future.
+        if (string.Equals(
+                securityStampBeforeReset,
+                securityStampAfterReset,
+                StringComparison.Ordinal))
+        {
+            var stampResult =
+                await _userManager.UpdateSecurityStampAsync(user);
+
+            if (!stampResult.Succeeded)
+            {
+                await transaction.RollbackAsync(
+                    cancellationToken);
+
+                _logger.LogError(
+                    "Password reset succeeded for user {UserId}, but the Identity security stamp could not be rotated. Error codes: {ErrorCodes}",
+                    user.Id,
+                    stampResult.Errors.Select(error =>
+                        error.Code).ToArray());
+
+                return Problem(
+                    detail:
+                        "The password could not be reset securely.",
+                    statusCode:
+                        StatusCodes.Status500InternalServerError);
+            }
         }
 
         // Mark this code and any other unused code as consumed.

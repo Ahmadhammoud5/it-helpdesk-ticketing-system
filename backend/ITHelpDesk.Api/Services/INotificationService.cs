@@ -12,6 +12,14 @@ public interface INotificationService
         string message,
         CancellationToken cancellationToken = default);
 
+    Task<int> CreateForUsersAsync(
+        IReadOnlyCollection<int> userIds,
+        int? ticketId,
+        string type,
+        string title,
+        string message,
+        CancellationToken cancellationToken = default);
+
     Task<NotificationSummaryResponse> GetForUserAsync(
         int userId,
         CancellationToken cancellationToken = default);

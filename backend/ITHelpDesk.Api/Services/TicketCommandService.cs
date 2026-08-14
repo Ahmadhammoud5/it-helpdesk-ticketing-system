@@ -9,10 +9,17 @@ namespace ITHelpDesk.Api.Services;
 public sealed class TicketCommandService : ITicketCommandService
 {
     private readonly ApplicationDbContext _dbContext;
+    private readonly INotificationService _notificationService;
+    private readonly ILogger<TicketCommandService> _logger;
 
-    public TicketCommandService(ApplicationDbContext dbContext)
+    public TicketCommandService(
+        ApplicationDbContext dbContext,
+        INotificationService notificationService,
+        ILogger<TicketCommandService> logger)
     {
         _dbContext = dbContext;
+        _notificationService = notificationService;
+        _logger = logger;
     }
 
     public async Task<TicketCommandResult> CreateAsync(
@@ -69,6 +76,10 @@ public sealed class TicketCommandService : ITicketCommandService
 
         var response = await GetTicketResponseAsync(
             ticket.Id,
+            cancellationToken);
+
+        await NotifyOperationalUsersAsync(
+            ticket,
             cancellationToken);
 
         return TicketCommandResult.Success(response);
@@ -305,5 +316,50 @@ public sealed class TicketCommandService : ITicketCommandService
             .ToUpperInvariant();
 
         return $"TKT-{datePart}-{randomPart}";
+    }
+
+    private async Task NotifyOperationalUsersAsync(
+        Ticket ticket,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var recipientIds = await (
+                    from user in _dbContext.Users.AsNoTracking()
+                    join userRole in
+                        _dbContext.UserRoles.AsNoTracking()
+                        on user.Id equals userRole.UserId
+                    join role in
+                        _dbContext.Roles.AsNoTracking()
+                        on userRole.RoleId equals role.Id
+                    where
+                        user.IsActive &&
+                        user.Id != ticket.CreatedByUserId &&
+                        (role.Name == SystemRoles.Admin ||
+                         role.Name == SystemRoles.Manager)
+                    select user.Id)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            await _notificationService.CreateForUsersAsync(
+                recipientIds,
+                ticket.Id,
+                "TicketCreated",
+                "New ticket created",
+                $"Ticket {ticket.ReferenceNumber}: {ticket.Title}",
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Ticket {TicketId} was created, but operational notifications could not be persisted.",
+                ticket.Id);
+        }
     }
 }

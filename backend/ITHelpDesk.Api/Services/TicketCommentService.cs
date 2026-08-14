@@ -12,11 +12,17 @@ public sealed class TicketCommentService
     private const int MaximumCommentLength = 5000;
 
     private readonly ApplicationDbContext _dbContext;
+    private readonly INotificationService _notificationService;
+    private readonly ILogger<TicketCommentService> _logger;
 
     public TicketCommentService(
-        ApplicationDbContext dbContext)
+        ApplicationDbContext dbContext,
+        INotificationService notificationService,
+        ILogger<TicketCommentService> logger)
     {
         _dbContext = dbContext;
+        _notificationService = notificationService;
+        _logger = logger;
     }
 
     public async Task<
@@ -232,6 +238,12 @@ public sealed class TicketCommentService
             });
 
         await _dbContext.SaveChangesAsync(
+            cancellationToken);
+
+        await NotifyParticipantsAsync(
+            ticket,
+            currentUserId,
+            request.IsInternal,
             cancellationToken);
 
         return TicketCommentResult<
@@ -514,5 +526,84 @@ public sealed class TicketCommentService
         }
 
         return TicketCommentError.None;
+    }
+
+    private async Task NotifyParticipantsAsync(
+        Ticket ticket,
+        int actorUserId,
+        bool isInternal,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var recipientIds = new HashSet<int>();
+
+            if (!isInternal)
+            {
+                recipientIds.Add(ticket.CreatedByUserId);
+            }
+
+            if (ticket.AssignedToUserId.HasValue &&
+                ticket.AssignedToUserId.Value != actorUserId)
+            {
+                var assignedAgentId =
+                    ticket.AssignedToUserId.Value;
+
+                var assignedUserIsEligible = await (
+                        from user in
+                            _dbContext.Users.AsNoTracking()
+                        join userRole in
+                            _dbContext.UserRoles.AsNoTracking()
+                            on user.Id equals userRole.UserId
+                        join role in
+                            _dbContext.Roles.AsNoTracking()
+                            on userRole.RoleId equals role.Id
+                        where
+                            user.Id == assignedAgentId &&
+                            user.IsActive &&
+                            role.Name ==
+                                SystemRoles.ITSupportAgent
+                        select user.Id)
+                    .AnyAsync(cancellationToken);
+
+                if (assignedUserIsEligible)
+                {
+                    recipientIds.Add(assignedAgentId);
+                }
+            }
+
+            recipientIds.Remove(actorUserId);
+
+            if (recipientIds.Count == 0)
+            {
+                return;
+            }
+
+            await _notificationService.CreateForUsersAsync(
+                recipientIds,
+                ticket.Id,
+                isInternal
+                    ? "InternalNoteAdded"
+                    : "TicketCommentAdded",
+                isInternal
+                    ? "Internal note added"
+                    : "New ticket comment",
+                isInternal
+                    ? $"Ticket {ticket.ReferenceNumber} has a new internal note."
+                    : $"Ticket {ticket.ReferenceNumber} has a new public comment.",
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Comment on ticket {TicketId} was created, but participant notifications could not be persisted.",
+                ticket.Id);
+        }
     }
 }

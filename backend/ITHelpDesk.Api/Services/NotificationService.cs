@@ -12,13 +12,16 @@ public sealed class NotificationService
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly IHubContext<NotificationHub> _hubContext;
+    private readonly ILogger<NotificationService> _logger;
 
     public NotificationService(
         ApplicationDbContext dbContext,
-        IHubContext<NotificationHub> hubContext)
+        IHubContext<NotificationHub> hubContext,
+        ILogger<NotificationService> logger)
     {
         _dbContext = dbContext;
         _hubContext = hubContext;
+        _logger = logger;
     }
 
     public async Task<NotificationResponse> CreateAsync(
@@ -47,16 +50,73 @@ public sealed class NotificationService
 
         var response = Map(notification);
 
-        await _hubContext.Clients
-            .Group(
-                NotificationHub.GetUserGroup(
-                    userId.ToString()))
-            .SendAsync(
-                "notificationReceived",
-                response,
-                cancellationToken);
+        await BroadcastAsync(
+            userId,
+            response,
+            cancellationToken);
 
         return response;
+    }
+
+    public async Task<int> CreateForUsersAsync(
+        IReadOnlyCollection<int> userIds,
+        int? ticketId,
+        string type,
+        string title,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        var distinctUserIds = userIds
+            .Where(userId => userId > 0)
+            .Distinct()
+            .ToArray();
+
+        if (distinctUserIds.Length == 0)
+        {
+            return 0;
+        }
+
+        var activeUserIds = await _dbContext.Users
+            .AsNoTracking()
+            .Where(user =>
+                distinctUserIds.Contains(user.Id) &&
+                user.IsActive)
+            .Select(user => user.Id)
+            .ToListAsync(cancellationToken);
+
+        if (activeUserIds.Count == 0)
+        {
+            return 0;
+        }
+
+        var now = DateTime.UtcNow;
+        var notifications = activeUserIds
+            .Select(userId => new Notification
+            {
+                UserId = userId,
+                TicketId = ticketId,
+                Type = type.Trim(),
+                Title = title.Trim(),
+                Message = message.Trim(),
+                IsRead = false,
+                CreatedDate = now
+            })
+            .ToList();
+
+        _dbContext.Notifications.AddRange(notifications);
+
+        await _dbContext.SaveChangesAsync(
+            cancellationToken);
+
+        foreach (var notification in notifications)
+        {
+            await BroadcastAsync(
+                notification.UserId,
+                Map(notification),
+                cancellationToken);
+        }
+
+        return notifications.Count;
     }
 
     public async Task<NotificationSummaryResponse> GetForUserAsync(
@@ -163,5 +223,36 @@ public sealed class NotificationService
             CreatedDate = notification.CreatedDate,
             ReadDate = notification.ReadDate
         };
+    }
+
+    private async Task BroadcastAsync(
+        int userId,
+        NotificationResponse notification,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _hubContext.Clients
+                .Group(
+                    NotificationHub.GetUserGroup(
+                        userId.ToString()))
+                .SendAsync(
+                    "notificationReceived",
+                    notification,
+                    cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Notification {NotificationId} was persisted but could not be delivered in real time to user {UserId}.",
+                notification.Id,
+                userId);
+        }
     }
 }

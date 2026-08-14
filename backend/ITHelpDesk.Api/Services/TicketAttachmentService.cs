@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.DTOs.Tickets;
 using ITHelpDesk.Api.Entities;
@@ -209,6 +210,16 @@ public sealed class TicketAttachmentService
                 IReadOnlyList<TicketAttachmentResponse>>
                 .Failure(
                     TicketAttachmentError.Forbidden);
+        }
+
+        if (ticket.StatusId is
+            TicketStatusIds.Closed or
+            TicketStatusIds.Cancelled)
+        {
+            return TicketAttachmentResult<
+                IReadOnlyList<TicketAttachmentResponse>>
+                .Failure(
+                    TicketAttachmentError.TicketIsFinal);
         }
 
         if (files is null || files.Count == 0)
@@ -556,6 +567,15 @@ public sealed class TicketAttachmentService
             return TicketAttachmentResult<bool>
                 .Failure(
                     TicketAttachmentError.Forbidden);
+        }
+
+        if (ticket.StatusId is
+            TicketStatusIds.Closed or
+            TicketStatusIds.Cancelled)
+        {
+            return TicketAttachmentResult<bool>
+                .Failure(
+                    TicketAttachmentError.TicketIsFinal);
         }
 
         var attachment =
@@ -939,7 +959,8 @@ public sealed class TicketAttachmentService
                         CreatedByUserId =
                             ticket.CreatedByUserId,
                         AssignedToUserId =
-                            ticket.AssignedToUserId
+                            ticket.AssignedToUserId,
+                        StatusId = ticket.StatusId
                     })
             .SingleOrDefaultAsync(
                 cancellationToken);
@@ -1037,6 +1058,8 @@ public sealed class TicketAttachmentService
         public int CreatedByUserId { get; set; }
 
         public int? AssignedToUserId { get; set; }
+
+        public int StatusId { get; set; }
     }
 
     private sealed record ValidatedUploadFile(

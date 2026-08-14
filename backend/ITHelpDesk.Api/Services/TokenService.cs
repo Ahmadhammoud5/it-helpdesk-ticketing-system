@@ -27,6 +27,12 @@ public sealed class TokenService : ITokenService
                 "The user must have an email address.");
         }
 
+        if (string.IsNullOrWhiteSpace(user.SecurityStamp))
+        {
+            throw new InvalidOperationException(
+                "The user must have an Identity security stamp.");
+        }
+
         var fullName = $"{user.FirstName} {user.LastName}".Trim();
         var expiresAtUtc = DateTime.UtcNow
             .AddMinutes(_jwtOptions.ExpirationMinutes);
@@ -55,7 +61,12 @@ public sealed class TokenService : ITokenService
 
             new(
                 JwtRegisteredClaimNames.Jti,
-                Guid.NewGuid().ToString())
+                Guid.NewGuid().ToString()),
+
+            new(
+                SecurityStampFingerprint.ClaimType,
+                SecurityStampFingerprint.Compute(
+                    user.SecurityStamp))
         };
 
         foreach (var role in roles)

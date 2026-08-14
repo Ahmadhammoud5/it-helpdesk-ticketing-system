@@ -208,6 +208,13 @@ public sealed class TicketAttachmentsController
                             "You are not authorized to perform this attachment operation."
                     }),
 
+            TicketAttachmentError.TicketIsFinal =>
+                Conflict(new
+                {
+                    message =
+                        "Attachments cannot be modified after a ticket is closed or cancelled."
+                }),
+
             TicketAttachmentError.NoFiles =>
                 BadRequest(new
                 {

@@ -1626,12 +1626,18 @@ function TicketDetailsPage() {
                 </span>
               </div>
 
-              <form
-                onSubmit={
-                  handleUploadAttachments
-                }
-                className="border-b border-slate-200 p-5 sm:p-6"
-              >
+              {isFinalTicket ? (
+                <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-600 sm:px-6">
+                  Attachments are read-only because this ticket is{' '}
+                  {ticket.statusName.toLowerCase()}.
+                </div>
+              ) : (
+                <form
+                  onSubmit={
+                    handleUploadAttachments
+                  }
+                  className="border-b border-slate-200 p-5 sm:p-6"
+                >
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -1752,7 +1758,8 @@ function TicketDetailsPage() {
                     {attachmentSuccess}
                   </div>
                 )}
-              </form>
+                </form>
+              )}
 
               {attachments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
@@ -1775,11 +1782,12 @@ function TicketDetailsPage() {
                   {attachments.map(
                     (attachment) => {
                       const canDeleteAttachment =
-                        isAdmin ||
-                        isManager ||
-                        Number(
-                          attachment.uploadedByUserId,
-                        ) === currentUserId
+                        !isFinalTicket &&
+                        (isAdmin ||
+                          isManager ||
+                          Number(
+                            attachment.uploadedByUserId,
+                          ) === currentUserId)
 
                       return (
                         <article
