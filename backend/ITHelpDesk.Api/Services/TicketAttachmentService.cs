@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.DTOs.Tickets;
 using ITHelpDesk.Api.Entities;
@@ -117,8 +118,9 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketNotFound);
         }
 
-        if (!CanAccessTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -196,8 +198,9 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketNotFound);
         }
 
-        if (!CanAccessTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -207,6 +210,27 @@ public sealed class TicketAttachmentService
                 IReadOnlyList<TicketAttachmentResponse>>
                 .Failure(
                     TicketAttachmentError.Forbidden);
+        }
+
+        if (ticket.StatusId is
+            TicketStatusIds.Closed or
+            TicketStatusIds.Cancelled)
+        {
+            return TicketAttachmentResult<
+                IReadOnlyList<TicketAttachmentResponse>>
+                .Failure(
+                    TicketAttachmentError.TicketIsFinal);
+        }
+
+        if (ticket.StatusId == TicketStatusIds.Resolved &&
+            !isAdmin &&
+            !isManager &&
+            !isITSupportAgent)
+        {
+            return TicketAttachmentResult<
+                IReadOnlyList<TicketAttachmentResponse>>
+                .Failure(
+                    TicketAttachmentError.ResolvedIsReadOnly);
         }
 
         if (files is null || files.Count == 0)
@@ -453,8 +477,9 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketNotFound);
         }
 
-        if (!CanAccessTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -542,8 +567,9 @@ public sealed class TicketAttachmentService
                     TicketAttachmentError.TicketNotFound);
         }
 
-        if (!CanAccessTicket(
-                ticket,
+        if (!TicketAccessPolicy.CanView(
+                ticket.CreatedByUserId,
+                ticket.AssignedToUserId,
                 currentUserId,
                 isAdmin,
                 isManager,
@@ -552,6 +578,25 @@ public sealed class TicketAttachmentService
             return TicketAttachmentResult<bool>
                 .Failure(
                     TicketAttachmentError.Forbidden);
+        }
+
+        if (ticket.StatusId is
+            TicketStatusIds.Closed or
+            TicketStatusIds.Cancelled)
+        {
+            return TicketAttachmentResult<bool>
+                .Failure(
+                    TicketAttachmentError.TicketIsFinal);
+        }
+
+        if (ticket.StatusId == TicketStatusIds.Resolved &&
+            !isAdmin &&
+            !isManager &&
+            !isITSupportAgent)
+        {
+            return TicketAttachmentResult<bool>
+                .Failure(
+                    TicketAttachmentError.ResolvedIsReadOnly);
         }
 
         var attachment =
@@ -935,33 +980,11 @@ public sealed class TicketAttachmentService
                         CreatedByUserId =
                             ticket.CreatedByUserId,
                         AssignedToUserId =
-                            ticket.AssignedToUserId
+                            ticket.AssignedToUserId,
+                        StatusId = ticket.StatusId
                     })
             .SingleOrDefaultAsync(
                 cancellationToken);
-    }
-
-    private static bool CanAccessTicket(
-        TicketAccessInfo ticket,
-        int currentUserId,
-        bool isAdmin,
-        bool isManager,
-        bool isITSupportAgent)
-    {
-        if (isAdmin || isManager)
-        {
-            return true;
-        }
-
-        if (ticket.CreatedByUserId ==
-            currentUserId)
-        {
-            return true;
-        }
-
-        return isITSupportAgent &&
-               ticket.AssignedToUserId ==
-               currentUserId;
     }
 
     private string? GetSafeFullPath(
@@ -1056,6 +1079,8 @@ public sealed class TicketAttachmentService
         public int CreatedByUserId { get; set; }
 
         public int? AssignedToUserId { get; set; }
+
+        public int StatusId { get; set; }
     }
 
     private sealed record ValidatedUploadFile(

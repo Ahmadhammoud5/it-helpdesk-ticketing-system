@@ -7,8 +7,9 @@ Accept: application/json
 
 ###
 
-### Register employee
+### Register employee (Admin only; prefer /api/admin/users)
 POST {{ITHelpDesk_Api_HostAddress}}/api/auth/register
+Authorization: Bearer {{access_token}}
 Content-Type: application/json
 
 {

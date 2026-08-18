@@ -1,14 +1,17 @@
 import {
-  createContext,
-  useContext,
+  useCallback,
   useMemo,
   useState,
 } from 'react'
 
-import { login as loginRequest } from '../api/authApi'
+import {
+  getCurrentUser,
+  login as loginRequest,
+} from '../api/authApi'
 import {
   clearAccessToken,
   getAccessToken,
+  isAccessTokenRemembered,
   saveAccessToken,
 } from './tokenStorage'
 import {
@@ -16,8 +19,7 @@ import {
   getAuthProfile,
   saveAuthProfile,
 } from './authStorage'
-
-const AuthContext = createContext(null)
+import { AuthContext } from './authContextValue'
 
 function getInitialUser() {
   const profile = getAuthProfile()
@@ -43,7 +45,10 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(getInitialUser)
   const [authLoading, setAuthLoading] = useState(false)
 
-  async function signIn(credentials, rememberMe = false) {
+  const signIn = useCallback(async (
+    credentials,
+    rememberMe = false,
+  ) => {
     setAuthLoading(true)
 
     try {
@@ -57,6 +62,9 @@ export function AuthProvider({ children }) {
         email: response.email,
         roles: response.roles ?? [],
         expiresAtUtc: response.expiresAtUtc,
+        hasProfilePhoto:
+          response.hasProfilePhoto === true,
+        avatarVersion: 0,
       }
 
       saveAuthProfile(profile, rememberMe)
@@ -66,13 +74,48 @@ export function AuthProvider({ children }) {
     } finally {
       setAuthLoading(false)
     }
-  }
+  }, [])
 
-  function signOut() {
+  const signOut = useCallback(() => {
     clearAccessToken()
     clearAuthProfile()
     setUser(null)
-  }
+  }, [])
+
+  const updateCurrentUser = useCallback((updates) => {
+    setUser((currentUser) => {
+      if (!currentUser) {
+        return currentUser
+      }
+
+      const nextUser = {
+        ...currentUser,
+        ...updates,
+      }
+
+      saveAuthProfile(
+        nextUser,
+        isAccessTokenRemembered(),
+      )
+
+      return nextUser
+    })
+  }, [])
+
+  const refreshUser = useCallback(async () => {
+    const currentUser = await getCurrentUser()
+
+    updateCurrentUser({
+      userId: currentUser.userId,
+      fullName: currentUser.fullName,
+      email: currentUser.email,
+      roles: currentUser.roles ?? [],
+      hasProfilePhoto:
+        currentUser.hasProfilePhoto === true,
+    })
+
+    return currentUser
+  }, [updateCurrentUser])
 
   const value = useMemo(
     () => ({
@@ -81,8 +124,17 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(user && getAccessToken()),
       signIn,
       signOut,
+      updateCurrentUser,
+      refreshUser,
     }),
-    [user, authLoading],
+    [
+      user,
+      authLoading,
+      signIn,
+      signOut,
+      updateCurrentUser,
+      refreshUser,
+    ],
   )
 
   return (
@@ -90,14 +142,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-
-  if (!context) {
-    throw new Error('useAuth must be used inside AuthProvider.')
-  }
-
-  return context
 }

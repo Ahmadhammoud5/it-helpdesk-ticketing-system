@@ -30,6 +30,7 @@ public interface ITicketCommentService
             int currentUserId,
             bool isAdmin,
             bool isManager,
+            bool isSupportAgent,
             UpdateTicketCommentRequest request,
             CancellationToken cancellationToken);
 
@@ -40,5 +41,6 @@ public interface ITicketCommentService
             int currentUserId,
             bool isAdmin,
             bool isManager,
+            bool isSupportAgent,
             CancellationToken cancellationToken);
 }

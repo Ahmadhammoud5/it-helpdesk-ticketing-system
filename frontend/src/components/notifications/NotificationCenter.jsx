@@ -13,8 +13,9 @@ import {
 } from '../../api/notificationApi'
 
 import {
-  createNotificationHubConnection,
+  subscribeToNotifications,
 } from '../../api/notificationHub'
+import Skeleton from '../ui/Skeleton'
 
 function formatNotificationDate(value) {
   if (!value) {
@@ -34,6 +35,7 @@ function NotificationCenter() {
   const navigate = useNavigate()
 
   const containerRef = useRef(null)
+  const notificationIdsRef = useRef(new Set())
 
   const [notifications, setNotifications] =
     useState([])
@@ -55,7 +57,48 @@ function NotificationCenter() {
 
   useEffect(() => {
     let active = true
-    let connection = null
+
+    const unsubscribe = subscribeToNotifications(
+      (notification) => {
+        if (!active) {
+          return
+        }
+
+        const isNewNotification =
+          !notificationIdsRef.current.has(
+            notification.id,
+          )
+
+        notificationIdsRef.current.add(
+          notification.id,
+        )
+
+        setNotifications(
+          (currentNotifications) => {
+            const withoutDuplicate =
+              currentNotifications.filter(
+                (item) =>
+                  item.id !== notification.id,
+              )
+
+            return [
+              notification,
+              ...withoutDuplicate,
+            ].slice(0, 50)
+          },
+        )
+
+        if (
+          isNewNotification &&
+          !notification.isRead
+        ) {
+          setUnreadCount(
+            (currentCount) =>
+              currentCount + 1,
+          )
+        }
+      },
+    )
 
     async function initializeNotifications() {
       try {
@@ -69,12 +112,23 @@ function NotificationCenter() {
           return
         }
 
-        setNotifications(
-          result.notifications ?? [],
+        const loadedNotifications =
+          Array.isArray(result.notifications)
+            ? result.notifications
+            : []
+
+        notificationIdsRef.current = new Set(
+          loadedNotifications.map(
+            (notification) => notification.id,
+          ),
         )
 
+        setNotifications(loadedNotifications)
+
         setUnreadCount(
-          result.unreadCount ?? 0,
+          Number.isFinite(result.unreadCount)
+            ? result.unreadCount
+            : 0,
         )
       } catch {
         if (active) {
@@ -88,55 +142,13 @@ function NotificationCenter() {
         }
       }
 
-      connection =
-        createNotificationHubConnection(
-          (notification) => {
-            if (!active) {
-              return
-            }
-
-            setNotifications(
-              (currentNotifications) => {
-                const withoutDuplicate =
-                  currentNotifications.filter(
-                    (item) =>
-                      item.id !== notification.id,
-                  )
-
-                return [
-                  notification,
-                  ...withoutDuplicate,
-                ].slice(0, 50)
-              },
-            )
-
-            if (!notification.isRead) {
-              setUnreadCount(
-                (currentCount) =>
-                  currentCount + 1,
-              )
-            }
-          },
-        )
-
-      try {
-        await connection.start()
-      } catch (connectionError) {
-        console.error(
-          'Notification SignalR connection failed.',
-          connectionError,
-        )
-      }
     }
 
     initializeNotifications()
 
     return () => {
       active = false
-
-      if (connection) {
-        connection.stop().catch(() => {})
-      }
+      unsubscribe()
     }
   }, [])
 
@@ -152,15 +164,29 @@ function NotificationCenter() {
       }
     }
 
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
     document.addEventListener(
       'mousedown',
       handleClickOutside,
+    )
+    document.addEventListener(
+      'keydown',
+      handleEscape,
     )
 
     return () => {
       document.removeEventListener(
         'mousedown',
         handleClickOutside,
+      )
+      document.removeEventListener(
+        'keydown',
+        handleEscape,
       )
     }
   }, [])
@@ -255,14 +281,20 @@ function NotificationCenter() {
         onClick={() =>
           setIsOpen((current) => !current)
         }
-        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-        aria-label="Notifications"
+        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-500/50 dark:hover:bg-blue-500/15 dark:hover:text-blue-300 dark:focus:ring-blue-500/20"
+        aria-label={
+          unreadCount === 0
+            ? 'Notifications'
+            : `Notifications, ${unreadCount} unread`
+        }
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
         title="Notifications"
       >
         <Bell size={18} />
 
         {unreadCount > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
+          <span aria-hidden="true" className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
             {unreadCount > 99
               ? '99+'
               : unreadCount}
@@ -271,8 +303,8 @@ function NotificationCenter() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-12 z-50 w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
+        <div role="dialog" aria-label="Notifications" className="absolute right-0 top-12 z-50 w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/40">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 dark:border-slate-700">
             <div>
               <h2 className="font-bold text-slate-900">
                 Notifications
@@ -296,7 +328,7 @@ function NotificationCenter() {
                 unreadCount === 0 ||
                 isMarkingAll
               }
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent dark:text-blue-300 dark:hover:bg-blue-500/15 dark:focus:ring-blue-500/20 dark:disabled:text-slate-600"
             >
               {isMarkingAll ? (
                 <LoaderCircle
@@ -312,18 +344,25 @@ function NotificationCenter() {
           </div>
 
           {error && (
-            <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs font-medium text-red-600">
+            <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs font-medium text-red-600 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300">
               {error}
             </div>
           )}
 
-          <div className="max-h-[430px] overflow-y-auto">
+          <div className="max-h-[min(430px,calc(100dvh-7rem))] overflow-y-auto overscroll-contain">
             {isLoading ? (
-              <div className="flex items-center justify-center py-12 text-slate-400">
-                <LoaderCircle
-                  size={24}
-                  className="animate-spin"
-                />
+              <div role="status" aria-label="Loading notifications" className="divide-y divide-slate-100 dark:divide-slate-800">
+                <span className="sr-only">Loading notifications</span>
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="flex animate-pulse gap-3 px-4 py-4">
+                    <Skeleton className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-1/3" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : notifications.length === 0 ? (
               <div className="px-6 py-12 text-center">
@@ -354,15 +393,15 @@ function NotificationCenter() {
                     className={[
                       'flex w-full gap-3 border-b border-slate-100 px-4 py-4 text-left transition last:border-b-0',
                       notification.isRead
-                        ? 'bg-white hover:bg-slate-50'
-                        : 'bg-blue-50/70 hover:bg-blue-50',
+                        ? 'bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800'
+                        : 'bg-blue-50/70 hover:bg-blue-50 dark:bg-blue-500/15 dark:hover:bg-blue-500/25',
                     ].join(' ')}
                   >
                     <span
                       className={[
                         'mt-1 h-2.5 w-2.5 shrink-0 rounded-full',
                         notification.isRead
-                          ? 'bg-slate-200'
+                          ? 'bg-slate-200 dark:bg-slate-600'
                           : 'bg-blue-500',
                       ].join(' ')}
                     />

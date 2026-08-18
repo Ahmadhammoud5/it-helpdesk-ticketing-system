@@ -1,16 +1,28 @@
 import { Navigate, createBrowserRouter } from 'react-router'
 
 import ProtectedRoute from '../auth/ProtectedRoute'
-import EmployeeLayout from '../components/layout/EmployeeLayout'
+import {
+  ROLES,
+  TICKET_AUTHOR_ROLES,
+} from '../auth/roles'
+import AppLayout from '../components/layout/EmployeeLayout'
+import RootLayout from '../components/layout/RootLayout'
 import LoginPage from '../pages/LoginPage'
 import ForgotPasswordPage from '../pages/ForgotPasswordPage'
-import DashboardPage from '../pages/DashboardPage'
-import CreateTicketPage from '../pages/CreateTicketPage'
-import MyTicketsPage from '../pages/MyTicketsPage'
-import TicketDetailsPage from '../pages/TicketDetailsPage'
-import EditTicketPage from '../pages/EditTicketPage'
+import ErrorPage from '../pages/ErrorPage'
+import {
+  CreateTicketPage,
+  DashboardPage,
+  EditTicketPage,
+  MyTicketsPage,
+  ProfilePage,
+  ReportsPage,
+  TicketDetailsPage,
+  TeamPage,
+  UsersPage,
+} from './lazyPages'
 
-const router = createBrowserRouter([
+const routes = [
   {
     path: '/',
     element: <Navigate to="/dashboard" replace />,
@@ -24,9 +36,17 @@ const router = createBrowserRouter([
     element: <ForgotPasswordPage />,
   },
   {
+    path: '/access-denied',
     element: (
       <ProtectedRoute>
-        <EmployeeLayout />
+        <ErrorPage type="403" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    element: (
+      <ProtectedRoute>
+        <AppLayout />
       </ProtectedRoute>
     ),
     children: [
@@ -39,8 +59,16 @@ const router = createBrowserRouter([
         element: <MyTicketsPage />,
       },
       {
+        path: '/profile',
+        element: <ProfilePage />,
+      },
+      {
         path: '/tickets/create',
-        element: <CreateTicketPage />,
+        element: (
+          <ProtectedRoute allowedRoles={TICKET_AUTHOR_ROLES}>
+            <CreateTicketPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: '/tickets/:ticketId',
@@ -48,13 +76,53 @@ const router = createBrowserRouter([
       },
       {
         path: '/tickets/:ticketId/edit',
-        element: <EditTicketPage />,
+        element: (
+          <ProtectedRoute allowedRoles={TICKET_AUTHOR_ROLES}>
+            <EditTicketPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/team',
+        element: (
+          <ProtectedRoute allowedRoles={[ROLES.manager]}>
+            <TeamPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/admin/users',
+        element: (
+          <ProtectedRoute allowedRoles={[ROLES.admin]}>
+            <UsersPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/reports',
+        element: (
+          <ProtectedRoute
+            allowedRoles={[
+              ROLES.admin,
+              ROLES.manager,
+            ]}
+          >
+            <ReportsPage />
+          </ProtectedRoute>
+        ),
       },
     ],
   },
   {
     path: '*',
-    element: <Navigate to="/dashboard" replace />,
+    element: <ErrorPage type="404" />,
+  },
+]
+
+const router = createBrowserRouter([
+  {
+    element: <RootLayout />,
+    children: routes,
   },
 ])
 

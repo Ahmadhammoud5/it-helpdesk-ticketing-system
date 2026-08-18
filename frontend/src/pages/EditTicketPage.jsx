@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -26,10 +27,16 @@ import {
   getCategories,
   getPriorities,
 } from '../api/lookupApi'
+import { useAuth } from '../auth/useAuth'
+import { ROLES } from '../auth/roles'
+import Skeleton from '../components/ui/Skeleton'
+import { useToast } from '../components/toast/useToast'
 
 function EditTicketPage() {
+  const { showToast } = useToast()
   const { ticketId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [ticket, setTicket] = useState(null)
 
@@ -59,7 +66,14 @@ function EditTicketPage() {
 
   const [saving, setSaving] = useState(false)
 
-  async function loadPage() {
+  const isAdmin = user?.roles?.includes(ROLES.admin)
+  const isReadOnlyForEmployee =
+    !isAdmin &&
+    ['Resolved', 'Closed', 'Cancelled'].includes(
+      ticket?.statusName,
+    )
+
+  const loadPage = useCallback(async () => {
     setLoading(true)
     setPageError('')
     setNotFound(false)
@@ -114,11 +128,11 @@ function EditTicketPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [ticketId])
 
   useEffect(() => {
     loadPage()
-  }, [ticketId])
+  }, [loadPage])
 
   function handleChange(event) {
     const {
@@ -207,6 +221,11 @@ function EditTicketPage() {
           Number(form.priorityId),
       })
 
+      showToast('The ticket details were saved.', {
+        type: 'success',
+        title: 'Ticket updated',
+      })
+
       navigate(`/tickets/${ticketId}`, {
         replace: true,
         state: {
@@ -278,15 +297,26 @@ function EditTicketPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white">
-        <LoaderCircle
-          size={32}
-          className="animate-spin text-blue-600"
-        />
-
-        <p className="mt-4 text-sm font-semibold text-slate-700">
-          Loading ticket...
-        </p>
+      <div role="status" aria-label="Loading ticket editor" className="animate-pulse space-y-6">
+        <span className="sr-only">Loading ticket editor</span>
+        <div>
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="mt-4 h-9 w-72 max-w-full" />
+          <Skeleton className="mt-3 h-4 w-96 max-w-full" />
+        </div>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+          <Skeleton className="mt-5 h-44" />
+          <div className="mt-6 flex justify-end gap-3">
+            <Skeleton className="h-11 w-24" />
+            <Skeleton className="h-11 w-36" />
+          </div>
+        </section>
       </div>
     )
   }
@@ -312,7 +342,7 @@ function EditTicketPage() {
           className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white"
         >
           <ArrowLeft size={17} />
-          Return to my tickets
+          Return to tickets
         </Link>
       </section>
     )
@@ -346,6 +376,34 @@ function EditTicketPage() {
     )
   }
 
+  if (isReadOnlyForEmployee) {
+    return (
+      <section className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 px-5 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-amber-600">
+          <FilePenLine size={28} />
+        </div>
+
+        <h1 className="mt-5 text-2xl font-bold text-amber-950">
+          Ticket is read-only
+        </h1>
+
+        <p className="mt-2 max-w-lg text-sm leading-6 text-amber-800">
+          This ticket is {ticket.statusName.toLowerCase()}.
+          Employees can still view it, but its submitted
+          information can no longer be edited.
+        </p>
+
+        <Link
+          to={`/tickets/${ticketId}`}
+          className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-700 px-5 text-sm font-semibold text-white transition hover:bg-amber-800"
+        >
+          <ArrowLeft size={17} />
+          Return to ticket details
+        </Link>
+      </section>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <section>
@@ -368,7 +426,7 @@ function EditTicketPage() {
 
           <p className="mt-2 text-sm leading-6 text-slate-500">
             Update the information submitted with
-            your support request.
+            this support request.
           </p>
         </div>
       </section>

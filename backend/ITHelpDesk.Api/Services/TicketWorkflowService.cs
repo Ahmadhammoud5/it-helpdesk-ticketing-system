@@ -511,6 +511,11 @@ public sealed class TicketWorkflowService
             return true;
         }
 
+        if (isAgent)
+        {
+            return false;
+        }
+
         return
             ticket.CreatedByUserId == userId &&
             newStatusId == TicketStatusIds.Cancelled;
@@ -524,12 +529,13 @@ public sealed class TicketWorkflowService
         bool isManager,
         bool isAgent)
     {
-        return
-            isAdmin ||
-            isManager ||
-            createdByUserId == userId ||
-            (isAgent &&
-             assignedToUserId == userId);
+        return TicketAccessPolicy.CanView(
+            createdByUserId,
+            assignedToUserId,
+            userId,
+            isAdmin,
+            isManager,
+            isAgent);
     }
 
     private static bool IsValidTransition(

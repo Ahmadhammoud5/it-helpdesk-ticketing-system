@@ -1,9 +1,13 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
 } from 'react'
-import { Link } from 'react-router'
+import {
+  Link,
+  useSearchParams,
+} from 'react-router'
 import {
   AlertCircle,
   ArrowRight,
@@ -14,7 +18,15 @@ import {
   TicketCheck,
 } from 'lucide-react'
 
-import { getTickets } from '../api/ticketApi'
+import {
+  getSupportAgents,
+  getTickets,
+} from '../api/ticketApi'
+import { useAuth } from '../auth/useAuth'
+import {
+  getRoleContext,
+  ROLES,
+} from '../auth/roles'
 import {
   getCategories,
   getStatuses,
@@ -30,6 +42,8 @@ const statusStyles = {
     'bg-emerald-50 text-emerald-700 ring-emerald-600/10',
   Closed:
     'bg-slate-100 text-slate-600 ring-slate-500/10',
+  Cancelled:
+    'bg-red-50 text-red-700 ring-red-600/10',
 }
 
 const priorityStyles = {
@@ -83,9 +97,28 @@ function LoadingRows() {
 }
 
 function MyTicketsPage() {
+  const { user } = useAuth()
+  const roleContext = getRoleContext(user)
+  const [searchParams, setSearchParams] =
+    useSearchParams()
+  const searchQuery =
+    searchParams.get('search') ?? ''
+  const assignedToQuery =
+    searchParams.get('assignedTo') ?? ''
+  const assignmentQuery =
+    searchParams.get('assignment') ?? ''
+  const hasAssignmentFilter =
+    Boolean(assignedToQuery) ||
+    assignmentQuery.toLowerCase() === 'unassigned'
+  const canResolveAgents =
+    roleContext.role === ROLES.admin ||
+    roleContext.role === ROLES.manager
+
   const [tickets, setTickets] = useState([])
   const [categories, setCategories] = useState([])
   const [statuses, setStatuses] = useState([])
+  const [assignedAgentName, setAssignedAgentName] =
+    useState('')
 
   const [activeStatus, setActiveStatus] =
     useState('All')
@@ -93,14 +126,15 @@ function MyTicketsPage() {
   const [categoryFilter, setCategoryFilter] =
     useState('all')
 
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] =
+    useState(searchQuery)
   const [sortOrder, setSortOrder] =
     useState('newest')
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  async function loadPageData() {
+  const loadPageData = useCallback(async () => {
     setLoading(true)
     setError('')
 
@@ -109,10 +143,17 @@ function MyTicketsPage() {
         ticketData,
         categoryData,
         statusData,
+        supportAgentData,
       ] = await Promise.all([
-        getTickets(),
+        getTickets({
+          assignedTo: assignedToQuery || undefined,
+          assignment: assignmentQuery || undefined,
+        }),
         getCategories(),
         getStatuses(),
+        assignedToQuery && canResolveAgents
+          ? getSupportAgents().catch(() => [])
+          : Promise.resolve([]),
       ])
 
       setTickets(
@@ -132,19 +173,52 @@ function MyTicketsPage() {
           ? statusData
           : [],
       )
+
+      const assignedAgent = Array.isArray(supportAgentData)
+        ? supportAgentData.find(
+            (agent) =>
+              String(agent.userId) === assignedToQuery,
+          )
+        : null
+
+      setAssignedAgentName(assignedAgent?.fullName ?? '')
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ??
-          'Unable to load your tickets. Make sure the backend is running and try again.',
+          'Unable to load tickets. Make sure the backend is running and try again.',
       )
     } finally {
       setLoading(false)
     }
-  }
+  }, [assignedToQuery, assignmentQuery, canResolveAgents])
 
   useEffect(() => {
     loadPageData()
-  }, [])
+  }, [loadPageData])
+
+  useEffect(() => {
+    setSearchTerm(searchQuery)
+  }, [searchQuery])
+
+  function updateTicketSearch(value) {
+    setSearchTerm(value)
+
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        const cleanValue = value.trim()
+
+        if (cleanValue) {
+          next.set('search', value)
+        } else {
+          next.delete('search')
+        }
+
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   const filteredTickets = useMemo(() => {
     const searchValue =
@@ -214,8 +288,30 @@ function MyTicketsPage() {
   function clearFilters() {
     setActiveStatus('All')
     setCategoryFilter('all')
-    setSearchTerm('')
     setSortOrder('newest')
+
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.delete('search')
+        next.delete('assignedTo')
+        next.delete('assignment')
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  function clearAssignmentFilter() {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.delete('assignedTo')
+        next.delete('assignment')
+        return next
+      },
+      { replace: true },
+    )
   }
 
   const tabs = [
@@ -236,22 +332,23 @@ function MyTicketsPage() {
           </p>
 
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
-            My tickets
+            {roleContext.ticketsTitle}
           </h1>
 
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            View, filter and manage all your
-            support requests.
+            {roleContext.ticketsDescription}
           </p>
         </div>
 
-        <Link
-          to="/tickets/create"
-          className="inline-flex h-11 items-center justify-center gap-2 self-start rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
-        >
-          <Plus size={18} />
-          Create ticket
-        </Link>
+        {roleContext.canCreateTickets && (
+          <Link
+            to="/tickets/create"
+            className="inline-flex h-11 items-center justify-center gap-2 self-start rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+          >
+            <Plus size={18} />
+            Create ticket
+          </Link>
+        )}
       </section>
 
       {error && (
@@ -284,6 +381,23 @@ function MyTicketsPage() {
         </section>
       )}
 
+      {hasAssignmentFilter && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
+          <p className="font-semibold text-blue-800">
+            {assignedToQuery
+              ? `Assigned to: ${assignedAgentName || `Agent #${assignedToQuery}`}`
+              : 'Assignment: Unassigned active tickets'}
+          </p>
+          <button
+            type="button"
+            onClick={clearAssignmentFilter}
+            className="rounded-lg px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
+          >
+            Clear assignment filter
+          </button>
+        </section>
+      )}
+
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
         <div className="border-b border-slate-200 p-4 sm:p-5">
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -295,6 +409,9 @@ function MyTicketsPage() {
                 <button
                   key={tab.id ?? statusName}
                   type="button"
+                  aria-pressed={
+                    activeStatus === statusName
+                  }
                   onClick={() =>
                     setActiveStatus(statusName)
                   }
@@ -336,10 +453,11 @@ function MyTicketsPage() {
               type="search"
               value={searchTerm}
               onChange={(event) =>
-                setSearchTerm(
+                updateTicketSearch(
                   event.target.value,
                 )
               }
+              aria-label="Search tickets by title, reference or category"
               placeholder="Search by title or reference..."
               className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
             />
@@ -352,6 +470,7 @@ function MyTicketsPage() {
             />
 
             <select
+              aria-label="Filter tickets by category"
               value={categoryFilter}
               onChange={(event) =>
                 setCategoryFilter(
@@ -376,6 +495,7 @@ function MyTicketsPage() {
           </div>
 
           <select
+            aria-label="Sort tickets"
             value={sortOrder}
             onChange={(event) =>
               setSortOrder(
@@ -415,7 +535,9 @@ function MyTicketsPage() {
                     </th>
 
                     <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-                      Assigned agent
+                      {roleContext.role === ROLES.employee
+                        ? 'Assigned agent'
+                        : 'Requester'}
                     </th>
 
                     <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -491,8 +613,9 @@ function MyTicketsPage() {
                         </td>
 
                         <td className="px-4 py-4 text-sm font-medium text-slate-600">
-                          {ticket.assignedToName ??
-                            'Unassigned'}
+                          {roleContext.role === ROLES.employee
+                            ? ticket.assignedToName ?? 'Unassigned'
+                            : ticket.createdByName ?? 'Unknown'}
                         </td>
 
                         <td className="px-4 py-4">
@@ -595,8 +718,9 @@ function MyTicketsPage() {
 
                     <div className="mt-4 flex items-center justify-between gap-4 text-xs text-slate-500">
                       <span className="truncate">
-                        {ticket.assignedToName ??
-                          'Unassigned'}
+                        {roleContext.role === ROLES.employee
+                          ? `Agent: ${ticket.assignedToName ?? 'Unassigned'}`
+                          : `Requester: ${ticket.createdByName ?? 'Unknown'}`}
                       </span>
 
                       <span className="shrink-0">
@@ -631,25 +755,27 @@ function MyTicketsPage() {
             </div>
 
             <h2 className="mt-5 text-lg font-bold text-slate-900">
-              {tickets.length === 0
-                ? 'No tickets yet'
+              {tickets.length === 0 && !hasAssignmentFilter
+                ? roleContext.emptyTitle
                 : 'No tickets found'}
             </h2>
 
             <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
-              {tickets.length === 0
-                ? 'Create your first support request and it will appear here.'
+              {tickets.length === 0 && !hasAssignmentFilter
+                ? roleContext.emptyDescription
                 : 'Try changing the selected filters or searching with another title or reference number.'}
             </p>
 
-            {tickets.length === 0 ? (
-              <Link
-                to="/tickets/create"
-                className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
-              >
-                <Plus size={17} />
-                Create first ticket
-              </Link>
+            {tickets.length === 0 && !hasAssignmentFilter ? (
+              roleContext.canCreateTickets ? (
+                <Link
+                  to="/tickets/create"
+                  className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  <Plus size={17} />
+                  Create first ticket
+                </Link>
+              ) : null
             ) : (
               <button
                 type="button"

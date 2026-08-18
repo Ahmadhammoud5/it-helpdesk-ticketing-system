@@ -68,6 +68,9 @@ public class ApplicationDbContext
             entity.Property(user => user.PhoneNumber)
                 .HasMaxLength(30);
 
+            entity.Property(user => user.ProfilePhotoFileName)
+                .HasMaxLength(100);
+
             entity.HasOne(user => user.Department)
                 .WithMany(department => department.Users)
                 .HasForeignKey(user => user.DepartmentId)

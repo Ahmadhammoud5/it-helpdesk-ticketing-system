@@ -56,7 +56,18 @@ import {
   uploadTicketAttachments,
 } from '../api/ticketApi'
 import { getStatuses } from '../api/lookupApi'
-import { useAuth } from '../auth/AuthContext'
+import { subscribeToPresence } from '../api/notificationHub'
+import { useAuth } from '../auth/useAuth'
+import {
+  getRoleContext,
+  ROLES,
+} from '../auth/roles'
+import {
+  attachmentAccept,
+  formatFileSize,
+  validateAttachmentFiles,
+} from '../utils/ticketAttachments'
+import { formatPresence } from '../utils/presence'
 
 const statusStyles = {
   Open:
@@ -95,28 +106,6 @@ const allowedTransitions = {
   5: [],
   6: [],
 }
-
-const attachmentAccept =
-  '.png,.jpg,.jpeg,.webp,.pdf,.txt,.docx,.xlsx'
-
-const allowedAttachmentExtensions = new Set([
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.webp',
-  '.pdf',
-  '.txt',
-  '.docx',
-  '.xlsx',
-])
-
-const maxAttachmentFileSize =
-  10 * 1024 * 1024
-
-const maxAttachmentsPerUpload = 5
-
-const maxTicketAttachmentSize =
-  50 * 1024 * 1024
 
 function normalizeUtcDateValue(dateValue) {
   if (typeof dateValue !== 'string') {
@@ -176,36 +165,6 @@ function formatDuration(minutesValue) {
   }
 
   return `${hours} hr ${minutes} min`
-}
-
-function formatFileSize(bytesValue) {
-  const bytes = Number(bytesValue) || 0
-
-  if (bytes < 1024) {
-    return `${bytes} B`
-  }
-
-  const kilobytes = bytes / 1024
-
-  if (kilobytes < 1024) {
-    return `${kilobytes.toFixed(1)} KB`
-  }
-
-  const megabytes = kilobytes / 1024
-
-  return `${megabytes.toFixed(1)} MB`
-}
-
-function getFileExtension(fileName) {
-  const lastDotIndex = fileName.lastIndexOf('.')
-
-  if (lastDotIndex < 0) {
-    return ''
-  }
-
-  return fileName
-    .slice(lastDotIndex)
-    .toLowerCase()
 }
 
 function getTimelineTitle(item) {
@@ -314,6 +273,13 @@ function TicketDetailsPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
+  const [creationNotice] = useState(() => ({
+    ticketId,
+    ticketCreated:
+      location.state?.ticketCreated === true,
+    attachmentUploadError:
+      location.state?.attachmentUploadError ?? '',
+  }))
 
   const [ticket, setTicket] = useState(null)
   const [statuses, setStatuses] = useState([])
@@ -472,26 +438,39 @@ function TicketDetailsPage() {
     useState('')
 
   const ticketCreated =
-    location.state?.ticketCreated === true
+    creationNotice.ticketId === ticketId &&
+    creationNotice.ticketCreated
+  const attachmentUploadError =
+    creationNotice.attachmentUploadError
 
   const roles = user?.roles ?? []
   const currentUserId = Number(user?.userId)
+  const roleContext = getRoleContext(user)
 
-  const isAdmin = roles.includes('Admin')
-  const isManager = roles.includes('Manager')
+  const isAdmin = roles.includes(ROLES.admin)
+  const isManager = roles.includes(ROLES.manager)
   const isAgent = roles.includes(
-    'ITSupportAgent',
+    ROLES.supportAgent,
   )
+  const isEmployee = roles.includes(ROLES.employee)
 
   const canManageAssignments =
     isAdmin || isManager
 
-  const canCreateInternalNote =
-    isAdmin || isManager || isAgent
-
   const isFinalTicket =
     ticket?.statusName === 'Closed' ||
     ticket?.statusName === 'Cancelled'
+
+  const isResolvedTicket =
+    ticket?.statusName === 'Resolved'
+
+  const hasOperationalRole =
+    isAdmin || isManager || isAgent
+
+  const attachmentsAreReadOnly =
+    isFinalTicket ||
+    (ticket?.statusName === 'Resolved' &&
+      !hasOperationalRole)
 
   const isOwner =
     ticket &&
@@ -501,6 +480,16 @@ function TicketDetailsPage() {
     ticket &&
     isAgent &&
     currentUserId === ticket.assignedToUserId
+
+  const canCreateInternalNote =
+    isAdmin || isManager || isAssignedAgent
+
+  const canEditTicket =
+    isAdmin ||
+    (isEmployee &&
+      isOwner &&
+      !isFinalTicket &&
+      !isResolvedTicket)
 
   const canManageFullWorkflow =
     isAdmin ||
@@ -519,7 +508,7 @@ function TicketDetailsPage() {
       return transitionIds
     }
 
-    if (isOwner) {
+    if (isEmployee && isOwner) {
       return transitionIds.filter(
         (statusId) => statusId === 6,
       )
@@ -529,6 +518,7 @@ function TicketDetailsPage() {
   }, [
     ticket,
     canManageFullWorkflow,
+    isEmployee,
     isOwner,
   ])
 
@@ -683,6 +673,28 @@ function TicketDetailsPage() {
   useEffect(() => {
     loadPageData()
   }, [loadPageData])
+
+  useEffect(() => {
+    if (!canManageAssignments) {
+      return undefined
+    }
+
+    return subscribeToPresence((presence) => {
+      setSupportAgents((current) =>
+        current.map((agent) =>
+          agent.userId === presence.userId
+            ? {
+                ...agent,
+                isOnline: presence.isOnline,
+                lastSeenUtc:
+                  presence.lastSeenUtc ??
+                  agent.lastSeenUtc,
+              }
+            : agent,
+        ),
+      )
+    })
+  }, [canManageAssignments])
 
   useEffect(() => {
     if (!ticketCreated) {
@@ -1176,54 +1188,6 @@ function TicketDetailsPage() {
 
     clearAttachmentMessages()
 
-    if (
-      files.length >
-      maxAttachmentsPerUpload
-    ) {
-      setSelectedFiles([])
-      event.target.value = ''
-
-      setAttachmentError(
-        'Select no more than 5 files at once.',
-      )
-
-      return
-    }
-
-    const invalidTypeFile = files.find(
-      (file) =>
-        !allowedAttachmentExtensions.has(
-          getFileExtension(file.name),
-        ),
-    )
-
-    if (invalidTypeFile) {
-      setSelectedFiles([])
-      event.target.value = ''
-
-      setAttachmentError(
-        `${invalidTypeFile.name} has an unsupported file type.`,
-      )
-
-      return
-    }
-
-    const oversizedFile = files.find(
-      (file) =>
-        file.size > maxAttachmentFileSize,
-    )
-
-    if (oversizedFile) {
-      setSelectedFiles([])
-      event.target.value = ''
-
-      setAttachmentError(
-        `${oversizedFile.name} exceeds the 10 MB file limit.`,
-      )
-
-      return
-    }
-
     const currentStoredSize =
       attachments.reduce(
         (total, attachment) =>
@@ -1234,22 +1198,17 @@ function TicketDetailsPage() {
         0,
       )
 
-    const selectedSize = files.reduce(
-      (total, file) =>
-        total + file.size,
-      0,
-    )
+    const validationError =
+      validateAttachmentFiles(
+        files,
+        currentStoredSize,
+      )
 
-    if (
-      currentStoredSize + selectedSize >
-      maxTicketAttachmentSize
-    ) {
+    if (validationError) {
       setSelectedFiles([])
       event.target.value = ''
 
-      setAttachmentError(
-        'These files would exceed the 50 MB attachment limit for this ticket.',
-      )
+      setAttachmentError(validationError)
 
       return
     }
@@ -1263,6 +1222,13 @@ function TicketDetailsPage() {
     event.preventDefault()
 
     clearAttachmentMessages()
+
+    if (attachmentsAreReadOnly) {
+      setAttachmentError(
+        'Attachments are read-only for this ticket.',
+      )
+      return
+    }
 
     if (selectedFiles.length === 0) {
       setAttachmentError(
@@ -1356,6 +1322,13 @@ function TicketDetailsPage() {
   async function handleDeleteAttachment(
     attachment,
   ) {
+    if (attachmentsAreReadOnly) {
+      setAttachmentError(
+        'Attachments are read-only for this ticket.',
+      )
+      return
+    }
+
     const confirmed = window.confirm(
       `Delete ${attachment.originalFileName}?`,
     )
@@ -1424,7 +1397,7 @@ function TicketDetailsPage() {
           className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
         >
           <ArrowLeft size={17} />
-          Return to my tickets
+          Return to {roleContext.ticketsLinkLabel}
         </Link>
       </section>
     )
@@ -1460,7 +1433,7 @@ function TicketDetailsPage() {
   return (
     <>
       <div className="space-y-6">
-        {ticketCreated && (
+        {ticketCreated && !attachmentUploadError && (
           <section className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <CheckCircle2
               size={21}
@@ -1476,6 +1449,29 @@ function TicketDetailsPage() {
                 Your support request was
                 saved and sent to the IT
                 team.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {ticketCreated && attachmentUploadError && (
+          <section
+            role="alert"
+            className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4"
+          >
+            <AlertTriangle
+              size={21}
+              className="mt-0.5 shrink-0 text-amber-600"
+            />
+
+            <div>
+              <p className="text-sm font-bold text-amber-900">
+                Ticket created successfully, but some
+                attachments could not be uploaded.
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                {attachmentUploadError}
               </p>
             </div>
           </section>
@@ -1519,7 +1515,7 @@ function TicketDetailsPage() {
             className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-600"
           >
             <ArrowLeft size={17} />
-            Back to my tickets
+            Back to {roleContext.ticketsLinkLabel}
           </Link>
 
           <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
@@ -1581,25 +1577,29 @@ function TicketDetailsPage() {
                 </button>
               )}
 
-              <Link
-                to={`/tickets/${ticket.id}/edit`}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-              >
-                <Edit3 size={17} />
-                Edit ticket
-              </Link>
+              {canEditTicket && (
+                <>
+                  <Link
+                    to={`/tickets/${ticket.id}/edit`}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    <Edit3 size={17} />
+                    Edit ticket
+                  </Link>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteError('')
-                  setDeleteModalOpen(true)
-                }}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
-              >
-                <Trash2 size={17} />
-                Delete
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError('')
+                      setDeleteModalOpen(true)
+                    }}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                  >
+                    <Trash2 size={17} />
+                    Delete
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -1654,12 +1654,20 @@ function TicketDetailsPage() {
                 </span>
               </div>
 
-              <form
-                onSubmit={
-                  handleUploadAttachments
-                }
-                className="border-b border-slate-200 p-5 sm:p-6"
-              >
+              {attachmentsAreReadOnly ? (
+                <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-600 sm:px-6">
+                  Attachments are read-only because this ticket is{' '}
+                  {ticket.statusName === 'Resolved'
+                    ? 'resolved'
+                    : ticket.statusName.toLowerCase()}.
+                </div>
+              ) : (
+                <form
+                  onSubmit={
+                    handleUploadAttachments
+                  }
+                  className="border-b border-slate-200 p-5 sm:p-6"
+                >
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -1780,7 +1788,8 @@ function TicketDetailsPage() {
                     {attachmentSuccess}
                   </div>
                 )}
-              </form>
+                </form>
+              )}
 
               {attachments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
@@ -1803,11 +1812,12 @@ function TicketDetailsPage() {
                   {attachments.map(
                     (attachment) => {
                       const canDeleteAttachment =
-                        isAdmin ||
-                        isManager ||
-                        Number(
-                          attachment.uploadedByUserId,
-                        ) === currentUserId
+                        !attachmentsAreReadOnly &&
+                        (isAdmin ||
+                          isManager ||
+                          Number(
+                            attachment.uploadedByUserId,
+                          ) === currentUserId)
 
                       return (
                         <article
@@ -2667,9 +2677,7 @@ function TicketDetailsPage() {
                               agent.userId
                             }
                           >
-                            {
-                              agent.fullName
-                            }
+                            {agent.fullName} — {formatPresence(agent)}
                           </option>
                         ),
                       )}
@@ -2710,7 +2718,7 @@ function TicketDetailsPage() {
                         clearAssignmentMessages()
                       }}
                       rows={3}
-                      maxLength={1000}
+                      maxLength={255}
                       disabled={
                         isFinalTicket ||
                         assignmentOperationRunning
@@ -2723,7 +2731,7 @@ function TicketDetailsPage() {
                       {
                         assignmentReason.length
                       }
-                      /1000
+                      /255
                     </p>
                   </div>
 
@@ -3035,7 +3043,7 @@ function TicketDetailsPage() {
               to="/tickets"
               className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:text-blue-700"
             >
-              View all my tickets
+              View {roleContext.ticketsLinkLabel}
               <ChevronRight size={18} />
             </Link>
           </aside>

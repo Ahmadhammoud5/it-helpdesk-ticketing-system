@@ -1,7 +1,9 @@
 import httpClient from './httpClient'
 
-export async function getTickets() {
-  const response = await httpClient.get('/tickets')
+export async function getTickets(filters = {}) {
+  const response = await httpClient.get('/tickets', {
+    params: filters,
+  })
   return response.data
 }
 

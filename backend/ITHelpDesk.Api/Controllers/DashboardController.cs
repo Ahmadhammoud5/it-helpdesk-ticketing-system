@@ -36,6 +36,8 @@ public sealed class DashboardController : ControllerBase
             await _dashboardService.GetSummaryAsync(
                 userId,
                 User.IsInRole(SystemRoles.Admin),
+                User.IsInRole(SystemRoles.Manager),
+                User.IsInRole(SystemRoles.ITSupportAgent),
                 cancellationToken);
 
         return Ok(summary);
@@ -58,6 +60,8 @@ public sealed class DashboardController : ControllerBase
             await _dashboardService.GetChartsAsync(
                 userId,
                 User.IsInRole(SystemRoles.Admin),
+                User.IsInRole(SystemRoles.Manager),
+                User.IsInRole(SystemRoles.ITSupportAgent),
                 cancellationToken);
 
         return Ok(charts);

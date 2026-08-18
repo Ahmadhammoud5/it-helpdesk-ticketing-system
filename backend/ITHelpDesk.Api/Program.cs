@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
+using ITHelpDesk.Api.Constants;
 using ITHelpDesk.Api.Data;
 using ITHelpDesk.Api.Entities;
 using ITHelpDesk.Api.Hubs;
@@ -7,10 +10,17 @@ using ITHelpDesk.Api.Options;
 using ITHelpDesk.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using PdfSharp.Fonts;
 
 var builder = WebApplication.CreateBuilder(args);
+
+if (OperatingSystem.IsWindows())
+{
+    GlobalFontSettings.UseWindowsFontsUnderWindows = true;
+}
 
 // Password reset configuration
 builder.Services
@@ -175,8 +185,24 @@ builder.Services.AddScoped<
     DashboardService>();
 
 builder.Services.AddScoped<
+    IReportService,
+    ReportService>();
+
+builder.Services.AddScoped<
+    IReportExportService,
+    ReportExportService>();
+
+builder.Services.AddScoped<
     INotificationService,
     NotificationService>();
+
+builder.Services.AddScoped<
+    IManagerTeamService,
+    ManagerTeamService>();
+
+builder.Services.AddSingleton<
+    IPresenceService,
+    PresenceService>();
 
 // JWT authentication
 builder.Services
@@ -233,6 +259,63 @@ builder.Services
                 }
 
                 return Task.CompletedTask;
+            },
+            OnTokenValidated = async context =>
+            {
+                var userIdValue = context.Principal?
+                    .FindFirstValue(ClaimTypes.NameIdentifier);
+
+                if (!int.TryParse(userIdValue, out var userId))
+                {
+                    context.Fail(
+                        "The token user identifier is invalid.");
+                    return;
+                }
+
+                var userManager = context.HttpContext
+                    .RequestServices
+                    .GetRequiredService<
+                        UserManager<ApplicationUser>>();
+
+                var user = await userManager.FindByIdAsync(
+                    userId.ToString());
+
+                if (user is null || !user.IsActive)
+                {
+                    context.Fail(
+                        "The token user account is unavailable.");
+                    return;
+                }
+
+                var tokenStampFingerprint =
+                    context.Principal!.FindFirstValue(
+                        SecurityStampFingerprint.ClaimType);
+
+                var currentSecurityStamp =
+                    await userManager.GetSecurityStampAsync(user);
+
+                if (!SecurityStampFingerprint.Matches(
+                        currentSecurityStamp,
+                        tokenStampFingerprint))
+                {
+                    context.Fail(
+                        "The token session is no longer current.");
+                    return;
+                }
+
+                var currentRoles =
+                    await userManager.GetRolesAsync(user);
+
+                var tokenRoles = context.Principal!
+                    .FindAll(ClaimTypes.Role)
+                    .Select(claim => claim.Value)
+                    .ToHashSet(StringComparer.Ordinal);
+
+                if (!tokenRoles.SetEquals(currentRoles))
+                {
+                    context.Fail(
+                        "The token roles are no longer current.");
+                }
             }
         };
     });
@@ -241,6 +324,76 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddOpenApi();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode =
+        StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (
+        context,
+        cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(
+                MetadataName.RetryAfter,
+                out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                Math.Ceiling(retryAfter.TotalSeconds)
+                    .ToString(CultureInfo.InvariantCulture);
+        }
+
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new
+            {
+                message =
+                    "Too many attempts. Please wait a moment and try again."
+            },
+            cancellationToken);
+    };
+
+    options.AddPolicy(
+        AuthRateLimitPolicies.Login,
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            GetClientAddress(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder =
+                    QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy(
+        AuthRateLimitPolicies.ForgotPassword,
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            GetClientAddress(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                QueueProcessingOrder =
+                    QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy(
+        AuthRateLimitPolicies.ResetPassword,
+        context => RateLimitPartition.GetFixedWindowLimiter(
+            GetClientAddress(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                QueueProcessingOrder =
+                    QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+});
 
 var app = builder.Build();
 
@@ -271,6 +424,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseRouting();
+app.UseRateLimiter();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -280,3 +436,9 @@ app.MapHub<NotificationHub>(
     "/hubs/notifications");
 
 app.Run();
+
+static string GetClientAddress(HttpContext context)
+{
+    return context.Connection.RemoteIpAddress?.ToString()
+        ?? "unknown-client";
+}

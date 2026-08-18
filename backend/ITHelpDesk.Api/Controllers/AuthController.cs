@@ -8,6 +8,7 @@ using ITHelpDesk.Api.Options;
 using ITHelpDesk.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -47,10 +48,11 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
-    [AllowAnonymous]
+    [Authorize(Roles = SystemRoles.Admin)]
     [HttpPost("register")]
     public async Task<ActionResult<RegisterResponse>> Register(
-        RegisterRequest request)
+        RegisterRequest request,
+        CancellationToken cancellationToken)
     {
         var normalizedEmail = request.Email
             .Trim()
@@ -70,9 +72,11 @@ public class AuthController : ControllerBase
         if (request.DepartmentId.HasValue)
         {
             var departmentExists = await _dbContext.Departments
-                .AnyAsync(department =>
-                    department.Id == request.DepartmentId.Value &&
-                    department.IsActive);
+                .AnyAsync(
+                    department =>
+                        department.Id == request.DepartmentId.Value &&
+                        department.IsActive,
+                    cancellationToken);
 
             if (!departmentExists)
             {
@@ -149,6 +153,7 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("login")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Login)]
     public async Task<ActionResult<LoginResponse>> Login(
         LoginRequest request)
     {
@@ -171,7 +176,8 @@ public class AuthController : ControllerBase
         {
             return Unauthorized(new
             {
-                message = "This account is inactive."
+                message =
+                    "Your account is inactive. Contact your system administrator."
             });
         }
 
@@ -228,12 +234,17 @@ public class AuthController : ControllerBase
             UserId = user.Id,
             FullName = $"{user.FirstName} {user.LastName}",
             Email = user.Email!,
-            Roles = roles.ToArray()
+            Roles = roles.ToArray(),
+            HasProfilePhoto =
+                !string.IsNullOrWhiteSpace(
+                    user.ProfilePhotoFileName)
         });
     }
 
     [AllowAnonymous]
     [HttpPost("forgot-password")]
+    [EnableRateLimiting(
+        AuthRateLimitPolicies.ForgotPassword)]
     public async Task<IActionResult> ForgotPassword(
         ForgotPasswordRequest request,
         CancellationToken cancellationToken)
@@ -334,6 +345,8 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("reset-password")]
+    [EnableRateLimiting(
+        AuthRateLimitPolicies.ResetPassword)]
     public async Task<IActionResult> ResetPassword(
         ResetPasswordRequest request,
         CancellationToken cancellationToken)
@@ -433,6 +446,9 @@ public class AuthController : ControllerBase
             });
         }
 
+        var securityStampBeforeReset =
+            await _userManager.GetSecurityStampAsync(user);
+
         var identityToken =
             await _userManager.GeneratePasswordResetTokenAsync(user);
 
@@ -456,6 +472,39 @@ public class AuthController : ControllerBase
                         description = error.Description
                     })
             });
+        }
+
+        var securityStampAfterReset =
+            await _userManager.GetSecurityStampAsync(user);
+
+        // ResetPasswordAsync rotates the Identity security stamp in the
+        // standard store. This guard keeps session invalidation reliable
+        // if the password-store behavior is customized in the future.
+        if (string.Equals(
+                securityStampBeforeReset,
+                securityStampAfterReset,
+                StringComparison.Ordinal))
+        {
+            var stampResult =
+                await _userManager.UpdateSecurityStampAsync(user);
+
+            if (!stampResult.Succeeded)
+            {
+                await transaction.RollbackAsync(
+                    cancellationToken);
+
+                _logger.LogError(
+                    "Password reset succeeded for user {UserId}, but the Identity security stamp could not be rotated. Error codes: {ErrorCodes}",
+                    user.Id,
+                    stampResult.Errors.Select(error =>
+                        error.Code).ToArray());
+
+                return Problem(
+                    detail:
+                        "The password could not be reset securely.",
+                    statusCode:
+                        StatusCodes.Status500InternalServerError);
+            }
         }
 
         // Mark this code and any other unused code as consumed.
@@ -513,7 +562,10 @@ public class AuthController : ControllerBase
             fullName = $"{user.FirstName} {user.LastName}",
             email = user.Email,
             departmentId = user.DepartmentId,
-            roles
+            roles,
+            hasProfilePhoto =
+                !string.IsNullOrWhiteSpace(
+                    user.ProfilePhotoFileName)
         });
     }
 }

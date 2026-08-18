@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -19,9 +20,21 @@ import {
   getDashboardCharts,
   getDashboardSummary,
 } from '../api/dashboardApi'
-import { getTickets } from '../api/ticketApi'
-import { useAuth } from '../auth/AuthContext'
+import {
+  subscribeToPresence,
+  subscribeToRealtimeStatus,
+} from '../api/notificationHub'
+import {
+  getSupportAgents,
+  getTickets,
+} from '../api/ticketApi'
+import { useAuth } from '../auth/useAuth'
+import {
+  getRoleContext,
+  ROLES,
+} from '../auth/roles'
 import DashboardCharts from '../components/dashboard/DashboardCharts'
+import { formatPresence } from '../utils/presence'
 
 const statusStyles = {
   Open: 'bg-blue-50 text-blue-700 ring-blue-600/10',
@@ -33,6 +46,8 @@ const statusStyles = {
     'bg-emerald-50 text-emerald-700 ring-emerald-600/10',
   Closed:
     'bg-slate-100 text-slate-600 ring-slate-500/10',
+  Cancelled:
+    'bg-red-50 text-red-700 ring-red-600/10',
 }
 
 const priorityStyles = {
@@ -101,8 +116,15 @@ function DashboardSkeleton() {
 
 function DashboardPage() {
   const { user } = useAuth()
+  const roleContext = getRoleContext(user)
+  const isManager = roleContext.role === ROLES.manager
 
   const [tickets, setTickets] = useState([])
+  const [supportAgents, setSupportAgents] = useState([])
+  const [presenceUnavailable, setPresenceUnavailable] =
+    useState(false)
+  const [realtimeUnavailable, setRealtimeUnavailable] =
+    useState(true)
 
   const [charts, setCharts] = useState({
     ticketsByStatus: [],
@@ -121,7 +143,7 @@ function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  async function loadDashboard() {
+  const loadDashboard = useCallback(async () => {
     setLoading(true)
     setError('')
 
@@ -130,10 +152,14 @@ function DashboardPage() {
         summaryData,
         chartData,
         ticketData,
+        supportAgentData,
       ] = await Promise.all([
         getDashboardSummary(),
         getDashboardCharts(),
         getTickets(),
+        isManager
+          ? getSupportAgents().catch(() => null)
+          : Promise.resolve([]),
       ])
 
       setSummary({
@@ -163,6 +189,13 @@ function DashboardPage() {
           ? ticketData
           : [],
       )
+
+      setPresenceUnavailable(supportAgentData === null)
+      setSupportAgents(
+        Array.isArray(supportAgentData)
+          ? supportAgentData
+          : [],
+      )
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ??
@@ -171,11 +204,42 @@ function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [isManager])
 
   useEffect(() => {
     loadDashboard()
-  }, [])
+  }, [loadDashboard])
+
+  useEffect(() => {
+    if (!isManager) {
+      return undefined
+    }
+
+    const unsubscribePresence = subscribeToPresence((presence) => {
+      setSupportAgents((current) =>
+        current.map((agent) =>
+          agent.userId === presence.userId
+            ? {
+                ...agent,
+                isOnline: presence.isOnline,
+                lastSeenUtc:
+                  presence.lastSeenUtc ??
+                  agent.lastSeenUtc,
+              }
+            : agent,
+        ),
+      )
+    })
+
+    const unsubscribeStatus = subscribeToRealtimeStatus(
+      (isConnected) => setRealtimeUnavailable(!isConnected),
+    )
+
+    return () => {
+      unsubscribePresence()
+      unsubscribeStatus()
+    }
+  }, [isManager])
 
   const recentTickets = useMemo(() => {
     return [...tickets]
@@ -210,9 +274,9 @@ function DashboardPage() {
       iconClass: 'bg-violet-50 text-violet-600',
     },
     {
-      label: 'Resolved',
+      label: 'Completed',
       value: summary.resolvedTickets,
-      description: 'Resolved or closed tickets',
+      description: 'Resolved + closed tickets',
       icon: CheckCircle2,
       iconClass: 'bg-emerald-50 text-emerald-600',
     },
@@ -231,7 +295,7 @@ function DashboardPage() {
       <section className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-blue-600">
-            Employee workspace
+            {roleContext.portalLabel}
           </p>
 
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
@@ -239,17 +303,19 @@ function DashboardPage() {
           </h1>
 
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Here is what is happening with your support requests.
+            {roleContext.dashboardDescription}
           </p>
         </div>
 
-        <Link
-          to="/tickets/create"
-          className="inline-flex h-11 items-center justify-center gap-2 self-start rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
-        >
-          <Plus size={18} />
-          Create ticket
-        </Link>
+        {roleContext.canCreateTickets && (
+          <Link
+            to="/tickets/create"
+            className="inline-flex h-11 items-center justify-center gap-2 self-start rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+          >
+            <Plus size={18} />
+            Create ticket
+          </Link>
+        )}
       </section>
 
       {error && (
@@ -333,7 +399,7 @@ function DashboardPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Your most recently updated support requests.
+                  {roleContext.recentDescription}
                 </p>
               </div>
 
@@ -518,21 +584,22 @@ function DashboardPage() {
                 </div>
 
                 <h3 className="mt-5 text-lg font-bold text-slate-900">
-                  No tickets yet
+                  {roleContext.emptyTitle}
                 </h3>
 
                 <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
-                  Submit your first support request and it will appear
-                  here.
+                  {roleContext.emptyDescription}
                 </p>
 
-                <Link
-                  to="/tickets/create"
-                  className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
-                >
-                  <Plus size={17} />
-                  Create first ticket
-                </Link>
+                {roleContext.canCreateTickets && (
+                  <Link
+                    to="/tickets/create"
+                    className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    <Plus size={17} />
+                    Create first ticket
+                  </Link>
+                )}
               </div>
             )}
           </section>
@@ -544,41 +611,93 @@ function DashboardPage() {
               </div>
 
               <h2 className="mt-6 text-xl font-bold">
-                Need help with a technical issue?
+                {roleContext.role === ROLES.employee
+                  ? 'Need help with a technical issue?'
+                  : roleContext.role === ROLES.supportAgent
+                    ? 'Stay on top of your queue'
+                    : 'Keep ticket operations moving'}
               </h2>
 
               <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100">
-                Submit a detailed ticket and the IT team will receive it
-                immediately.
+                {roleContext.role === ROLES.employee
+                  ? 'Submit a detailed ticket and the IT team will receive it immediately.'
+                  : roleContext.role === ROLES.supportAgent
+                    ? 'Review assigned tickets, update workflow and keep requesters informed.'
+                    : 'Review ticket activity, assignments and workflow from one place.'}
               </p>
 
               <Link
-                to="/tickets/create"
+                to={
+                  roleContext.role === ROLES.employee
+                    ? '/tickets/create'
+                    : '/tickets'
+                }
                 className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/20 bg-blue-950 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-900"
               >
-                Create a new ticket
+                {roleContext.role === ROLES.employee
+                  ? 'Create a new ticket'
+                  : roleContext.role === ROLES.supportAgent
+                    ? 'Open assigned tickets'
+                    : 'Review all tickets'}
                 <ArrowRight size={16} />
               </Link>
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/50">
               <p className="text-sm font-bold text-slate-900">
-                Support availability
+                {isManager
+                  ? 'Agent availability'
+                  : 'Support availability'}
               </p>
 
-              <p className="mt-4 text-2xl font-bold text-emerald-600">
-                Online
-              </p>
+              {isManager ? (
+                presenceUnavailable || realtimeUnavailable ? (
+                  <p className="mt-4 text-sm text-slate-500">
+                    Status unavailable
+                  </p>
+                ) : supportAgents.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">
+                    No active support agents.
+                  </p>
+                ) : (
+                  <ul className="mt-4 space-y-3">
+                    {supportAgents.map((agent) => (
+                      <li
+                        key={agent.userId}
+                        className="flex items-start gap-3"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={[
+                            'mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full',
+                            agent.isOnline
+                              ? 'bg-emerald-500'
+                              : 'bg-slate-300',
+                          ].join(' ')}
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-slate-800">
+                            {agent.fullName}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            {formatPresence(agent)}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              ) : (
+                <>
+                  <p className="mt-4 text-2xl font-bold text-blue-600">
+                    Help is ready
+                  </p>
 
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                IT support is currently available and responding to
-                requests.
-              </p>
-
-              <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                Support team available
-              </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Submit and track requests through the support queue.
+                  </p>
+                </>
+              )}
             </article>
           </section>
         </>
