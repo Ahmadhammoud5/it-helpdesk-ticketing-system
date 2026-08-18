@@ -280,7 +280,7 @@ function NotificationCenter() {
         onClick={() =>
           setIsOpen((current) => !current)
         }
-        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-500/50 dark:hover:bg-blue-500/15 dark:hover:text-blue-300 dark:focus:ring-blue-500/20"
         aria-label={
           unreadCount === 0
             ? 'Notifications'
@@ -302,8 +302,8 @@ function NotificationCenter() {
       </button>
 
       {isOpen && (
-        <div role="dialog" aria-label="Notifications" className="absolute right-0 top-12 z-50 w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
+        <div role="dialog" aria-label="Notifications" className="absolute right-0 top-12 z-50 w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/40">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 dark:border-slate-700">
             <div>
               <h2 className="font-bold text-slate-900">
                 Notifications
@@ -327,7 +327,7 @@ function NotificationCenter() {
                 unreadCount === 0 ||
                 isMarkingAll
               }
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent dark:text-blue-300 dark:hover:bg-blue-500/15 dark:focus:ring-blue-500/20 dark:disabled:text-slate-600"
             >
               {isMarkingAll ? (
                 <LoaderCircle
@@ -343,7 +343,7 @@ function NotificationCenter() {
           </div>
 
           {error && (
-            <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs font-medium text-red-600">
+            <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs font-medium text-red-600 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300">
               {error}
             </div>
           )}
@@ -385,15 +385,15 @@ function NotificationCenter() {
                     className={[
                       'flex w-full gap-3 border-b border-slate-100 px-4 py-4 text-left transition last:border-b-0',
                       notification.isRead
-                        ? 'bg-white hover:bg-slate-50'
-                        : 'bg-blue-50/70 hover:bg-blue-50',
+                        ? 'bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800'
+                        : 'bg-blue-50/70 hover:bg-blue-50 dark:bg-blue-500/15 dark:hover:bg-blue-500/25',
                     ].join(' ')}
                   >
                     <span
                       className={[
                         'mt-1 h-2.5 w-2.5 shrink-0 rounded-full',
                         notification.isRead
-                          ? 'bg-slate-200'
+                          ? 'bg-slate-200 dark:bg-slate-600'
                           : 'bg-blue-500',
                       ].join(' ')}
                     />

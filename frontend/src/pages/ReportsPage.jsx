@@ -37,6 +37,7 @@ import {
   downloadReportPdf,
   getReportSummary,
 } from '../api/reportApi'
+import { useTheme } from '../theme/useTheme'
 
 const statusColors = {
   Open: '#2563eb',
@@ -206,6 +207,26 @@ function ChartCard({ title, description, children }) {
 }
 
 function ReportsPage() {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+  const chartTheme = {
+    grid: isDark ? '#334155' : '#e2e8f0',
+    text: isDark ? '#cbd5e1' : '#64748b',
+    surface: isDark ? '#0f172a' : '#ffffff',
+    border: isDark ? '#475569' : '#e2e8f0',
+    cursor: isDark ? '#1e293b' : '#f8fafc',
+  }
+  const tooltipProps = {
+    contentStyle: {
+      backgroundColor: chartTheme.surface,
+      borderColor: chartTheme.border,
+      borderRadius: '12px',
+      color: chartTheme.text,
+    },
+    labelStyle: { color: chartTheme.text },
+    itemStyle: { color: chartTheme.text },
+  }
+
   const initialPeriod = useMemo(
     () => getThisMonthPeriod(),
     [],
@@ -609,23 +630,24 @@ function ReportsPage() {
                       <CartesianGrid
                         strokeDasharray="3 3"
                         vertical={false}
-                        stroke="#e2e8f0"
+                        stroke={chartTheme.grid}
                       />
                       <XAxis
                         dataKey="date"
                         tickFormatter={formatChartDate}
                         minTickGap={28}
-                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tick={{ fontSize: 11, fill: chartTheme.text }}
                         axisLine={false}
                         tickLine={false}
                       />
                       <YAxis
                         allowDecimals={false}
-                        tick={{ fontSize: 12, fill: '#64748b' }}
+                        tick={{ fontSize: 12, fill: chartTheme.text }}
                         axisLine={false}
                         tickLine={false}
                       />
                       <Tooltip
+                        {...tooltipProps}
                         labelFormatter={(label) => formatPeriodDate(label)}
                         formatter={(value) => [value, 'Tickets']}
                       />
@@ -660,22 +682,25 @@ function ReportsPage() {
                       <CartesianGrid
                         strokeDasharray="3 3"
                         vertical={false}
-                        stroke="#e2e8f0"
+                        stroke={chartTheme.grid}
                       />
                       <XAxis
                         dataKey="name"
                         interval={0}
-                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tick={{ fontSize: 11, fill: chartTheme.text }}
                         axisLine={false}
                         tickLine={false}
                       />
                       <YAxis
                         allowDecimals={false}
-                        tick={{ fontSize: 12, fill: '#64748b' }}
+                        tick={{ fontSize: 12, fill: chartTheme.text }}
                         axisLine={false}
                         tickLine={false}
                       />
-                      <Tooltip cursor={{ fill: '#f8fafc' }} />
+                      <Tooltip
+                        {...tooltipProps}
+                        cursor={{ fill: chartTheme.cursor }}
+                      />
                       <Bar dataKey="count" name="Tickets" radius={[6, 6, 0, 0]}>
                         {normalizedReport.ticketsByStatus.map((item, index) => (
                           <Cell
@@ -718,7 +743,7 @@ function ReportsPage() {
                             />
                           ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip {...tooltipProps} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -775,12 +800,12 @@ function ReportsPage() {
                       <CartesianGrid
                         strokeDasharray="3 3"
                         horizontal={false}
-                        stroke="#e2e8f0"
+                        stroke={chartTheme.grid}
                       />
                       <XAxis
                         type="number"
                         allowDecimals={false}
-                        tick={{ fontSize: 12, fill: '#64748b' }}
+                        tick={{ fontSize: 12, fill: chartTheme.text }}
                         axisLine={false}
                         tickLine={false}
                       />
@@ -793,11 +818,14 @@ function ReportsPage() {
                             ? `${value.slice(0, 15)}…`
                             : value
                         }
-                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tick={{ fontSize: 11, fill: chartTheme.text }}
                         axisLine={false}
                         tickLine={false}
                       />
-                      <Tooltip cursor={{ fill: '#f8fafc' }} />
+                      <Tooltip
+                        {...tooltipProps}
+                        cursor={{ fill: chartTheme.cursor }}
+                      />
                       <Bar
                         dataKey="count"
                         name="Tickets"

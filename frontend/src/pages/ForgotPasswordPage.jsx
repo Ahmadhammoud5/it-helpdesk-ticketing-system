@@ -15,6 +15,7 @@ import {
   forgotPassword,
   resetPassword,
 } from '../api/authApi'
+import ThemeToggle from '../components/theme/ThemeToggle'
 
 function getErrorMessage(error, fallbackMessage) {
   const responseData = error.response?.data
@@ -144,7 +145,9 @@ function ForgotPasswordPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 lg:grid lg:grid-cols-2">
+    <main className="relative min-h-screen bg-slate-50 transition-colors dark:bg-slate-950 lg:grid lg:grid-cols-2">
+      <ThemeToggle className="absolute right-5 top-5 z-20 shadow-sm sm:right-8 sm:top-8" />
+
       <section className="relative hidden min-h-screen overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -left-24 top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
 
@@ -205,7 +208,7 @@ function ForgotPasswordPage() {
         </p>
       </section>
 
-      <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-8 lg:px-14">
+      <section className="flex min-h-screen items-center justify-center px-5 py-20 sm:px-8 lg:px-14 lg:py-10">
         <div className="w-full max-w-md">
           <div className="mb-8">
             <Link

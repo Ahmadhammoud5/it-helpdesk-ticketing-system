@@ -11,6 +11,8 @@ import {
   YAxis,
 } from 'recharts'
 
+import { useTheme } from '../../theme/useTheme'
+
 const pieColors = [
   '#2563eb',
   '#f59e0b',
@@ -29,6 +31,27 @@ function EmptyChart() {
 }
 
 function DashboardCharts({ charts }) {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+  const chartTheme = {
+    grid: isDark ? '#334155' : '#e2e8f0',
+    text: isDark ? '#cbd5e1' : '#64748b',
+    surface: isDark ? '#0f172a' : '#ffffff',
+    border: isDark ? '#475569' : '#e2e8f0',
+    cursor: isDark ? '#1e293b' : '#f8fafc',
+  }
+
+  const tooltipProps = {
+    contentStyle: {
+      backgroundColor: chartTheme.surface,
+      borderColor: chartTheme.border,
+      borderRadius: '12px',
+      color: chartTheme.text,
+    },
+    labelStyle: { color: chartTheme.text },
+    itemStyle: { color: chartTheme.text },
+  }
+
   const ticketsByStatus =
     charts?.ticketsByStatus ?? []
 
@@ -80,14 +103,14 @@ function DashboardCharts({ charts }) {
                   <CartesianGrid
                     strokeDasharray="3 3"
                     vertical={false}
-                    stroke="#e2e8f0"
+                    stroke={chartTheme.grid}
                   />
 
                   <XAxis
                     dataKey="name"
                     tick={{
                       fontSize: 12,
-                      fill: '#64748b',
+                      fill: chartTheme.text,
                     }}
                     axisLine={false}
                     tickLine={false}
@@ -97,15 +120,16 @@ function DashboardCharts({ charts }) {
                     allowDecimals={false}
                     tick={{
                       fontSize: 12,
-                      fill: '#64748b',
+                      fill: chartTheme.text,
                     }}
                     axisLine={false}
                     tickLine={false}
                   />
 
                   <Tooltip
+                    {...tooltipProps}
                     cursor={{
-                      fill: '#f8fafc',
+                      fill: chartTheme.cursor,
                     }}
                   />
 
@@ -150,9 +174,27 @@ function DashboardCharts({ charts }) {
                     innerRadius={55}
                     outerRadius={90}
                     paddingAngle={3}
-                    label={({ name, value }) =>
-                      `${name}: ${value}`
-                    }
+                    label={({
+                      name,
+                      value,
+                      x,
+                      y,
+                      textAnchor,
+                    }) => (
+                      <text
+                        x={x}
+                        y={y}
+                        fill={chartTheme.text}
+                        fontSize={12}
+                        textAnchor={textAnchor}
+                        dominantBaseline="central"
+                      >
+                        {name}: {value}
+                      </text>
+                    )}
+                    labelLine={{
+                      stroke: chartTheme.text,
+                    }}
                   >
                     {ticketsByPriority.map(
                       (item, index) => (
@@ -169,7 +211,7 @@ function DashboardCharts({ charts }) {
                     )}
                   </Pie>
 
-                  <Tooltip />
+                  <Tooltip {...tooltipProps} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -209,7 +251,7 @@ function DashboardCharts({ charts }) {
                 <CartesianGrid
                   strokeDasharray="3 3"
                   horizontal={false}
-                  stroke="#e2e8f0"
+                  stroke={chartTheme.grid}
                 />
 
                 <XAxis
@@ -217,7 +259,7 @@ function DashboardCharts({ charts }) {
                   allowDecimals={false}
                   tick={{
                     fontSize: 12,
-                    fill: '#64748b',
+                    fill: chartTheme.text,
                   }}
                   axisLine={false}
                   tickLine={false}
@@ -229,15 +271,16 @@ function DashboardCharts({ charts }) {
                   width={100}
                   tick={{
                     fontSize: 12,
-                    fill: '#64748b',
+                    fill: chartTheme.text,
                   }}
                   axisLine={false}
                   tickLine={false}
                 />
 
                 <Tooltip
+                  {...tooltipProps}
                   cursor={{
-                    fill: '#f8fafc',
+                    fill: chartTheme.cursor,
                   }}
                 />
 

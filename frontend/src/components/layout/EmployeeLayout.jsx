@@ -30,6 +30,7 @@ import {
 } from '../../auth/roles'
 import NotificationCenter from '../notifications/NotificationCenter'
 import UserAvatar from '../profile/UserAvatar'
+import ThemeToggle from '../theme/ThemeToggle'
 import {
   acquireRealtimeConnection,
   releaseRealtimeConnection,
@@ -184,7 +185,7 @@ function SidebarContent({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-20 items-center justify-between border-b border-slate-200 px-5">
+      <div className="flex h-20 items-center justify-between border-b border-slate-200 px-5 dark:border-slate-800">
         <NavLink
           to="/dashboard"
           onClick={closeSidebar}
@@ -199,7 +200,7 @@ function SidebarContent({
           </div>
 
           <div>
-            <p className="font-bold text-slate-900">
+            <p className="font-bold text-slate-900 dark:text-slate-100">
               HelpDesk
             </p>
 
@@ -212,7 +213,7 @@ function SidebarContent({
         <button
           type="button"
           onClick={closeSidebar}
-          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
+          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-4 focus:ring-blue-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:focus:ring-blue-500/20 lg:hidden"
           aria-label="Close navigation"
         >
           <X size={20} />
@@ -241,8 +242,8 @@ function SidebarContent({
                   [
                     'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition',
                     isActive
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
                   ].join(' ')
                 }
               >
@@ -257,20 +258,20 @@ function SidebarContent({
         </div>
       </nav>
 
-      <div className="border-t border-slate-200 p-4">
-        <div className="rounded-2xl bg-slate-50 p-3">
+      <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+        <div className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-800/70">
           <div className="flex items-center gap-2">
             <NavLink
               to="/profile"
               onClick={closeSidebar}
               aria-label="Open your profile"
               title="Open profile"
-              className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 transition hover:bg-white"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 transition hover:bg-white dark:hover:bg-slate-700"
             >
               <UserAvatar user={user} />
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-slate-800">
+                <p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">
                   {user?.fullName ?? 'User'}
                 </p>
 
@@ -283,7 +284,7 @@ function SidebarContent({
             <button
               type="button"
               onClick={onLogout}
-              className="rounded-lg p-2 text-slate-400 transition hover:bg-white hover:text-red-500"
+              className="rounded-lg p-2 text-slate-400 transition hover:bg-white hover:text-red-500 focus:outline-none focus:ring-4 focus:ring-red-100 dark:hover:bg-slate-700 dark:hover:text-red-300 dark:focus:ring-red-500/20"
               aria-label="Sign out"
               title="Sign out"
             >
@@ -390,7 +391,7 @@ function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f8fc]">
+    <div className="min-h-screen bg-[#f6f8fc] transition-colors dark:bg-slate-950">
       {sidebarOpen && (
         <button
           type="button"
@@ -398,13 +399,13 @@ function AppLayout() {
           onClick={() =>
             setSidebarOpen(false)
           }
-          className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm dark:bg-black/65 lg:hidden"
         />
       )}
 
       <aside
         className={[
-          'fixed inset-y-0 left-0 z-50 w-[270px] border-r border-slate-200 bg-white transition-transform duration-300 lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-[270px] border-r border-slate-200 bg-white transition-transform duration-300 dark:border-slate-800 dark:bg-slate-900 lg:translate-x-0',
           sidebarOpen
             ? 'translate-x-0'
             : '-translate-x-full',
@@ -420,13 +421,13 @@ function AppLayout() {
       </aside>
 
       <div className="lg:pl-[270px]">
-        <header className="sticky top-0 z-30 flex h-20 items-center border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-30 flex h-20 items-center border-b border-slate-200 bg-white/95 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:px-6 lg:px-8">
           <button
             type="button"
             onClick={() =>
               setSidebarOpen(true)
             }
-            className="mr-3 rounded-xl p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+            className="mr-3 rounded-xl p-2 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-4 focus:ring-blue-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-blue-500/20 lg:hidden"
             aria-label="Open navigation"
           >
             <Menu size={22} />
@@ -456,11 +457,13 @@ function AppLayout() {
                     ? 'Search assigned tickets...'
                     : 'Search your tickets...'
               }
-              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:bg-slate-900 dark:focus:ring-blue-500/20"
             />
           </form>
 
           <div className="ml-auto flex items-center gap-3">
+            <ThemeToggle />
+
             <NotificationCenter />
 
             <button
@@ -468,7 +471,7 @@ function AppLayout() {
               onClick={() => navigate('/profile')}
               aria-label="Open your profile"
               title={user?.fullName}
-              className="rounded-full transition focus:outline-none focus:ring-4 focus:ring-blue-100"
+              className="rounded-full transition focus:outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-500/25"
             >
               <UserAvatar user={user} />
             </button>
