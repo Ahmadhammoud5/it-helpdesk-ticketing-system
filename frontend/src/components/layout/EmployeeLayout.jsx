@@ -10,6 +10,7 @@ import {
   useNavigate,
 } from 'react-router'
 import {
+  BarChart3,
   LayoutDashboard,
   LoaderCircle,
   LogOut,
@@ -73,6 +74,12 @@ function getNavigation(roles) {
         icon: UsersRound,
         end: true,
       },
+      {
+        label: 'Reports',
+        to: '/reports',
+        icon: BarChart3,
+        end: true,
+      },
     ]
   }
 
@@ -94,6 +101,12 @@ function getNavigation(roles) {
         label: 'Team',
         to: '/team',
         icon: UsersRound,
+        end: true,
+      },
+      {
+        label: 'Reports',
+        to: '/reports',
+        icon: BarChart3,
         end: true,
       },
     ]

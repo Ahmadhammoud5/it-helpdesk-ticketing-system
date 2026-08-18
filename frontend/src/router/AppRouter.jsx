@@ -14,6 +14,7 @@ import {
   EditTicketPage,
   MyTicketsPage,
   ProfilePage,
+  ReportsPage,
   TicketDetailsPage,
   TeamPage,
   UsersPage,
@@ -84,6 +85,19 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={[ROLES.admin]}>
             <UsersPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/reports',
+        element: (
+          <ProtectedRoute
+            allowedRoles={[
+              ROLES.admin,
+              ROLES.manager,
+            ]}
+          >
+            <ReportsPage />
           </ProtectedRoute>
         ),
       },

@@ -179,6 +179,10 @@ builder.Services.AddScoped<
     DashboardService>();
 
 builder.Services.AddScoped<
+    IReportService,
+    ReportService>();
+
+builder.Services.AddScoped<
     INotificationService,
     NotificationService>();
 
