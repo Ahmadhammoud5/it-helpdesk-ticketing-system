@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   CircleDot,
   Clock3,
+  FileSpreadsheet,
+  FileText,
   RefreshCw,
   TicketCheck,
   XCircle,
@@ -30,7 +32,11 @@ import {
   YAxis,
 } from 'recharts'
 
-import { getReportSummary } from '../api/reportApi'
+import {
+  downloadReportExcel,
+  downloadReportPdf,
+  getReportSummary,
+} from '../api/reportApi'
 
 const statusColors = {
   Open: '#2563eb',
@@ -211,6 +217,8 @@ function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [validationError, setValidationError] = useState('')
+  const [exportError, setExportError] = useState('')
+  const [exportingFormat, setExportingFormat] = useState('')
 
   const loadReport = useCallback(async () => {
     setLoading(true)
@@ -247,13 +255,57 @@ function ReportsPage() {
     }
 
     setValidationError('')
+    setExportError('')
     setAppliedPeriod({ ...draftPeriod })
   }
 
   function applyQuickPeriod(period) {
     setValidationError('')
+    setExportError('')
     setDraftPeriod(period)
     setAppliedPeriod(period)
+  }
+
+  async function handleExport(format) {
+    if (!report || exportingFormat) {
+      return
+    }
+
+    setExportError('')
+    setExportingFormat(format)
+
+    const period = {
+      from: report.from,
+      to: report.to,
+    }
+
+    try {
+      const download = format === 'excel'
+        ? await downloadReportExcel(period)
+        : await downloadReportPdf(period)
+
+      const downloadUrl = window.URL.createObjectURL(
+        download.blob,
+      )
+
+      const link = document.createElement('a')
+      const extension = format === 'excel' ? 'xlsx' : 'pdf'
+
+      link.href = downloadUrl
+      link.download = download.fileName ||
+        `helpdesk-report-${period.from}-to-${period.to}.${extension}`
+
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch {
+      setExportError(
+        `Unable to export the ${format === 'excel' ? 'Excel workbook' : 'PDF report'}. Please try again.`,
+      )
+    } finally {
+      setExportingFormat('')
+    }
   }
 
   const normalizedReport = {
@@ -350,11 +402,43 @@ function ReportsPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50 sm:p-6">
-        <div className="flex items-center gap-2">
-          <CalendarDays size={18} className="text-blue-600" />
-          <h2 className="font-bold text-slate-900">
-            Reporting period
-          </h2>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarDays size={18} className="text-blue-600" />
+            <h2 className="font-bold text-slate-900">
+              Reporting period
+            </h2>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => handleExport('excel')}
+              disabled={loading || !report || Boolean(exportingFormat)}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {exportingFormat === 'excel' ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <FileSpreadsheet size={17} />
+              )}
+              Export Excel
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleExport('pdf')}
+              disabled={loading || !report || Boolean(exportingFormat)}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {exportingFormat === 'pdf' ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <FileText size={17} />
+              )}
+              Export PDF
+            </button>
+          </div>
         </div>
 
         <form
@@ -428,6 +512,12 @@ function ReportsPage() {
         {validationError && (
           <p className="mt-3 text-sm font-medium text-red-600" role="alert">
             {validationError}
+          </p>
+        )}
+
+        {exportError && (
+          <p className="mt-3 text-sm font-medium text-red-600" role="alert">
+            {exportError}
           </p>
         )}
 

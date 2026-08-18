@@ -13,8 +13,14 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using PdfSharp.Fonts;
 
 var builder = WebApplication.CreateBuilder(args);
+
+if (OperatingSystem.IsWindows())
+{
+    GlobalFontSettings.UseWindowsFontsUnderWindows = true;
+}
 
 // Password reset configuration
 builder.Services
@@ -181,6 +187,10 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IReportService,
     ReportService>();
+
+builder.Services.AddScoped<
+    IReportExportService,
+    ReportExportService>();
 
 builder.Services.AddScoped<
     INotificationService,
