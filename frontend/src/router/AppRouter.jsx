@@ -6,8 +6,10 @@ import {
   TICKET_AUTHOR_ROLES,
 } from '../auth/roles'
 import AppLayout from '../components/layout/EmployeeLayout'
+import RootLayout from '../components/layout/RootLayout'
 import LoginPage from '../pages/LoginPage'
 import ForgotPasswordPage from '../pages/ForgotPasswordPage'
+import ErrorPage from '../pages/ErrorPage'
 import {
   CreateTicketPage,
   DashboardPage,
@@ -20,7 +22,7 @@ import {
   UsersPage,
 } from './lazyPages'
 
-const router = createBrowserRouter([
+const routes = [
   {
     path: '/',
     element: <Navigate to="/dashboard" replace />,
@@ -32,6 +34,14 @@ const router = createBrowserRouter([
   {
     path: '/forgot-password',
     element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/access-denied',
+    element: (
+      <ProtectedRoute>
+        <ErrorPage type="403" />
+      </ProtectedRoute>
+    ),
   },
   {
     element: (
@@ -105,7 +115,14 @@ const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <Navigate to="/dashboard" replace />,
+    element: <ErrorPage type="404" />,
+  },
+]
+
+const router = createBrowserRouter([
+  {
+    element: <RootLayout />,
+    children: routes,
   },
 ])
 

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
-  CheckCircle2,
   LoaderCircle,
   Power,
   Plus,
@@ -23,6 +22,8 @@ import {
 import { ROLES } from '../auth/roles'
 import { useAuth } from '../auth/useAuth'
 import { formatPresence } from '../utils/presence'
+import { useToast } from '../components/toast/useToast'
+import Skeleton from '../components/ui/Skeleton'
 
 const availableRoles = [
   ROLES.admin,
@@ -77,6 +78,7 @@ function getErrorMessage(error, fallback) {
 }
 
 function UsersPage() {
+  const { showToast } = useToast()
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [form, setForm] = useState(initialForm)
@@ -91,7 +93,6 @@ function UsersPage() {
     useState(true)
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
-  const [success, setSuccess] = useState('')
 
   async function loadUsers() {
     setLoading(true)
@@ -168,14 +169,12 @@ function UsersPage() {
       [field]: value,
     }))
     setFormError('')
-    setSuccess('')
   }
 
   async function handleCreateUser(event) {
     event.preventDefault()
     setCreating(true)
     setFormError('')
-    setSuccess('')
 
     try {
       await createUser({
@@ -187,7 +186,10 @@ function UsersPage() {
       })
 
       setForm(initialForm)
-      setSuccess('User created successfully.')
+      showToast('The new account is ready to use.', {
+        type: 'success',
+        title: 'User created',
+      })
       await loadUsers()
     } catch (requestError) {
       setFormError(
@@ -204,7 +206,6 @@ function UsersPage() {
   async function handleRoleChange(user, role) {
     setUpdatingUserId(user.userId)
     setError('')
-    setSuccess('')
 
     try {
       await updateUserRole(user.userId, role)
@@ -215,7 +216,10 @@ function UsersPage() {
             : item,
         ),
       )
-      setSuccess(`Role updated for ${user.fullName}.`)
+      showToast(`Role updated for ${user.fullName}.`, {
+        type: 'success',
+        title: 'Role updated',
+      })
     } catch (requestError) {
       setError(
         getErrorMessage(
@@ -243,7 +247,6 @@ function UsersPage() {
 
     setUpdatingStatusUserId(user.userId)
     setError('')
-    setSuccess('')
 
     try {
       const result = await updateUserStatus(
@@ -265,9 +268,10 @@ function UsersPage() {
         ),
       )
 
-      setSuccess(
-        `${user.fullName} was ${action}d successfully.`,
-      )
+      showToast(`${user.fullName} was ${action}d successfully.`, {
+        type: 'success',
+        title: nextIsActive ? 'Account reactivated' : 'Account deactivated',
+      })
     } catch (requestError) {
       setError(
         getErrorMessage(
@@ -300,13 +304,6 @@ function UsersPage() {
         <section aria-live="polite" className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <AlertCircle size={20} className="mt-0.5 shrink-0" />
           <p>{error}</p>
-        </section>
-      )}
-
-      {success && (
-        <section aria-live="polite" className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-          <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
-          <p>{success}</p>
         </section>
       )}
 
@@ -475,11 +472,19 @@ function UsersPage() {
           </div>
 
           {loading ? (
-            <div className="flex min-h-72 items-center justify-center">
-              <LoaderCircle
-                size={28}
-                className="animate-spin text-blue-600"
-              />
+            <div role="status" aria-label="Loading users" className="divide-y divide-slate-100 dark:divide-slate-800">
+              <span className="sr-only">Loading users</span>
+              {[1, 2, 3, 4, 5].map((item) => (
+                <div key={item} className="grid animate-pulse gap-4 px-6 py-5 sm:grid-cols-[minmax(0,1.4fr)_0.7fr_0.8fr_1fr] sm:items-center">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-3 w-56 max-w-full" />
+                  </div>
+                  <Skeleton className="h-7 w-20 rounded-full" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-10 w-40" />
+                </div>
+              ))}
             </div>
           ) : filteredUsers.length === 0 ? (
             <div className="flex min-h-72 flex-col items-center justify-center px-5 text-center">

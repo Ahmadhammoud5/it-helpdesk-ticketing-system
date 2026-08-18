@@ -38,6 +38,7 @@ import {
   getReportSummary,
 } from '../api/reportApi'
 import { useTheme } from '../theme/useTheme'
+import { useToast } from '../components/toast/useToast'
 
 const statusColors = {
   Open: '#2563eb',
@@ -207,6 +208,7 @@ function ChartCard({ title, description, children }) {
 }
 
 function ReportsPage() {
+  const { showToast } = useToast()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const chartTheme = {
@@ -294,6 +296,10 @@ function ReportsPage() {
 
     setExportError('')
     setExportingFormat(format)
+    showToast(
+      `Preparing the ${format === 'excel' ? 'Excel workbook' : 'PDF report'}…`,
+      { type: 'info', title: 'Export started', duration: 3000 },
+    )
 
     const period = {
       from: report.from,
@@ -320,6 +326,10 @@ function ReportsPage() {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(downloadUrl)
+      showToast('Your report download is ready.', {
+        type: 'success',
+        title: format === 'excel' ? 'Excel exported' : 'PDF exported',
+      })
     } catch {
       setExportError(
         `Unable to export the ${format === 'excel' ? 'Excel workbook' : 'PDF report'}. Please try again.`,

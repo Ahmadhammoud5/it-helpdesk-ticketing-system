@@ -15,6 +15,7 @@ import {
 import {
   subscribeToNotifications,
 } from '../../api/notificationHub'
+import Skeleton from '../ui/Skeleton'
 
 function formatNotificationDate(value) {
   if (!value) {
@@ -348,13 +349,20 @@ function NotificationCenter() {
             </div>
           )}
 
-          <div className="max-h-[430px] overflow-y-auto">
+          <div className="max-h-[min(430px,calc(100dvh-7rem))] overflow-y-auto overscroll-contain">
             {isLoading ? (
-              <div className="flex items-center justify-center py-12 text-slate-400">
-                <LoaderCircle
-                  size={24}
-                  className="animate-spin"
-                />
+              <div role="status" aria-label="Loading notifications" className="divide-y divide-slate-100 dark:divide-slate-800">
+                <span className="sr-only">Loading notifications</span>
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="flex animate-pulse gap-3 px-4 py-4">
+                    <Skeleton className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-1/3" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : notifications.length === 0 ? (
               <div className="px-6 py-12 text-center">

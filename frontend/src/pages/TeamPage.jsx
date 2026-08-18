@@ -4,7 +4,6 @@ import {
   AlertCircle,
   ArrowRight,
   Inbox,
-  LoaderCircle,
   RefreshCw,
   TicketCheck,
   UsersRound,
@@ -16,6 +15,7 @@ import {
   subscribeToPresence,
   subscribeToRealtimeStatus,
 } from '../api/notificationHub'
+import Skeleton from '../components/ui/Skeleton'
 
 function TeamPage() {
   const [team, setTeam] = useState({
@@ -155,9 +155,22 @@ function TeamPage() {
       )}
 
       {loading ? (
-        <div role="status" className="flex min-h-80 items-center justify-center text-blue-600">
-          <LoaderCircle size={28} className="animate-spin" />
+        <div role="status" aria-label="Loading team workload" className="animate-pulse space-y-6">
           <span className="sr-only">Loading team workload</span>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((item) => (
+              <Skeleton key={item} className="h-36 rounded-2xl" />
+            ))}
+          </div>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="mt-3 h-4 w-80 max-w-full" />
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {[1, 2, 3].map((item) => (
+                <Skeleton key={item} className="h-56 rounded-2xl" />
+              ))}
+            </div>
+          </section>
         </div>
       ) : !error && (
         <>

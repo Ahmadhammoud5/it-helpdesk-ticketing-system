@@ -23,7 +23,13 @@ function ProtectedRoute({ children, allowedRoles }) {
       allowedRoles.includes(role),
     )
   ) {
-    return <Navigate to="/dashboard" replace />
+    return (
+      <Navigate
+        to="/access-denied"
+        replace
+        state={{ from: location.pathname }}
+      />
+    )
   }
 
   return children

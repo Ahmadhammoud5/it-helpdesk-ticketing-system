@@ -4,7 +4,6 @@ import {
   AlertCircle,
   CalendarDays,
   Camera,
-  CheckCircle2,
   Eye,
   EyeOff,
   LoaderCircle,
@@ -25,6 +24,8 @@ import {
 import { useAuth } from '../auth/useAuth'
 import { getRoleContext } from '../auth/roles'
 import UserAvatar from '../components/profile/UserAvatar'
+import Skeleton from '../components/ui/Skeleton'
+import { useToast } from '../components/toast/useToast'
 
 const photoAccept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
 const maxPhotoSize = 2 * 1024 * 1024
@@ -74,6 +75,7 @@ function formatDate(dateValue) {
 }
 
 function ProfilePage() {
+  const { showToast } = useToast()
   const navigate = useNavigate()
   const {
     user,
@@ -91,11 +93,9 @@ function ProfilePage() {
   })
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileError, setProfileError] = useState('')
-  const [profileSuccess, setProfileSuccess] = useState('')
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [removingPhoto, setRemovingPhoto] = useState(false)
   const [photoError, setPhotoError] = useState('')
-  const [photoSuccess, setPhotoSuccess] = useState('')
   const [photoInputKey, setPhotoInputKey] = useState(0)
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -169,7 +169,6 @@ function ProfilePage() {
   function handleProfileChange(event) {
     const { name, value } = event.target
     setProfileError('')
-    setProfileSuccess('')
     setProfileForm((current) => ({
       ...current,
       [name]: value,
@@ -179,7 +178,6 @@ function ProfilePage() {
   async function handleProfileSubmit(event) {
     event.preventDefault()
     setProfileError('')
-    setProfileSuccess('')
 
     const firstName = profileForm.firstName.trim()
     const lastName = profileForm.lastName.trim()
@@ -215,7 +213,10 @@ function ProfilePage() {
         lastName: profileData.lastName,
         phoneNumber: profileData.phoneNumber ?? '',
       })
-      setProfileSuccess('Your profile was updated successfully.')
+      showToast('Your personal information was saved.', {
+        type: 'success',
+        title: 'Profile updated',
+      })
     } catch (requestError) {
       setProfileError(getErrorMessage(
         requestError,
@@ -230,7 +231,6 @@ function ProfilePage() {
     const photo = event.target.files?.[0]
 
     setPhotoError('')
-    setPhotoSuccess('')
 
     if (!photo) {
       return
@@ -259,7 +259,10 @@ function ProfilePage() {
     try {
       const profileData = await uploadProfilePhoto(photo)
       syncProfile(profileData, true)
-      setPhotoSuccess('Your profile photo was updated.')
+      showToast('Your new profile photo is now visible.', {
+        type: 'success',
+        title: 'Photo updated',
+      })
     } catch (requestError) {
       setPhotoError(getErrorMessage(
         requestError,
@@ -277,7 +280,6 @@ function ProfilePage() {
     }
 
     setPhotoError('')
-    setPhotoSuccess('')
     setRemovingPhoto(true)
 
     try {
@@ -289,7 +291,10 @@ function ProfilePage() {
       }
 
       syncProfile(profileData, true)
-      setPhotoSuccess('Your profile photo was removed.')
+      showToast('Your profile photo was removed.', {
+        type: 'success',
+        title: 'Photo removed',
+      })
     } catch (requestError) {
       setPhotoError(getErrorMessage(
         requestError,
@@ -346,12 +351,22 @@ function ProfilePage() {
 
   if (loading) {
     return (
-      <div
-        role="status"
-        className="flex min-h-[50vh] items-center justify-center text-blue-600"
-      >
-        <LoaderCircle size={28} className="animate-spin" />
+      <div role="status" aria-label="Loading profile" className="animate-pulse space-y-6">
         <span className="sr-only">Loading profile</span>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center gap-5">
+            <Skeleton className="h-24 w-24 shrink-0 rounded-full" />
+            <div className="flex-1 space-y-3">
+              <Skeleton className="h-7 w-56 max-w-full" />
+              <Skeleton className="h-4 w-72 max-w-full" />
+              <Skeleton className="h-10 w-48 max-w-full" />
+            </div>
+          </div>
+        </section>
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Skeleton className="h-[420px] rounded-2xl" />
+          <Skeleton className="h-[420px] rounded-2xl" />
+        </div>
       </div>
     )
   }
@@ -463,11 +478,6 @@ function ProfilePage() {
                 {photoError}
               </p>
             )}
-            {photoSuccess && (
-              <p role="status" className="mt-3 text-sm font-semibold text-emerald-700">
-                {photoSuccess}
-              </p>
-            )}
           </div>
         </div>
       </section>
@@ -544,8 +554,7 @@ function ProfilePage() {
               <ReadOnlyField label="Member since" value={formatDate(profile.createdDate)} icon={CalendarDays} />
             </div>
 
-            {profileError && <Message type="error">{profileError}</Message>}
-            {profileSuccess && <Message type="success">{profileSuccess}</Message>}
+            {profileError && <Message>{profileError}</Message>}
 
             <button
               type="submit"
@@ -616,7 +625,7 @@ function ProfilePage() {
               Use at least 8 characters with uppercase, lowercase, number and symbol characters.
             </p>
 
-            {passwordError && <Message type="error">{passwordError}</Message>}
+            {passwordError && <Message>{passwordError}</Message>}
 
             <button
               type="submit"
@@ -698,20 +707,13 @@ function PasswordField({
   )
 }
 
-function Message({ type, children }) {
-  const success = type === 'success'
-
+function Message({ children }) {
   return (
     <div
-      role={success ? 'status' : 'alert'}
-      className={[
-        'flex items-start gap-2 rounded-xl border px-4 py-3 text-sm font-semibold',
-        success
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-          : 'border-red-200 bg-red-50 text-red-700',
-      ].join(' ')}
+      role="alert"
+      className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
     >
-      {success ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />}
+      <AlertCircle size={17} />
       <span>{children}</span>
     </div>
   )

@@ -55,6 +55,11 @@ a {
   text-decoration: none;
 }
 
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
 .dark input,
 .dark textarea,
 .dark select { caret-color: #f8fafc; }
@@ -70,6 +75,17 @@ a {
   -webkit-text-fill-color: #f1f5f9;
   box-shadow: 0 0 0 1000px #0f172a inset;
   transition: background-color 9999s ease-out 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Dark counterparts for the shared surface and semantic utility palette. */

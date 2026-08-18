@@ -274,9 +274,9 @@ function DashboardPage() {
       iconClass: 'bg-violet-50 text-violet-600',
     },
     {
-      label: 'Resolved',
+      label: 'Completed',
       value: summary.resolvedTickets,
-      description: 'Resolved or closed tickets',
+      description: 'Resolved + closed tickets',
       icon: CheckCircle2,
       iconClass: 'bg-emerald-50 text-emerald-600',
     },

@@ -35,6 +35,7 @@ import {
   formatFileSize,
   validateAttachmentFiles,
 } from '../utils/ticketAttachments'
+import Skeleton from '../components/ui/Skeleton'
 
 const initialForm = {
   title: '',
@@ -418,15 +419,15 @@ function CreateTicketPage() {
           </div>
 
           {loadingLookups ? (
-            <div className="flex min-h-[420px] flex-col items-center justify-center p-6 text-center">
-              <LoaderCircle
-                size={30}
-                className="animate-spin text-blue-600"
-              />
-
-              <p className="mt-4 text-sm font-semibold text-slate-700">
-                Loading ticket form...
-              </p>
+            <div role="status" aria-label="Loading ticket form" className="animate-pulse space-y-6 p-5 sm:p-6">
+              <span className="sr-only">Loading ticket form</span>
+              <Skeleton className="h-20" />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Skeleton className="h-20" />
+                <Skeleton className="h-20" />
+              </div>
+              <Skeleton className="h-48" />
+              <Skeleton className="h-28" />
             </div>
           ) : (
             <>

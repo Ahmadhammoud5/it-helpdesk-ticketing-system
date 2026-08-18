@@ -29,8 +29,11 @@ import {
 } from '../api/lookupApi'
 import { useAuth } from '../auth/useAuth'
 import { ROLES } from '../auth/roles'
+import Skeleton from '../components/ui/Skeleton'
+import { useToast } from '../components/toast/useToast'
 
 function EditTicketPage() {
+  const { showToast } = useToast()
   const { ticketId } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -218,6 +221,11 @@ function EditTicketPage() {
           Number(form.priorityId),
       })
 
+      showToast('The ticket details were saved.', {
+        type: 'success',
+        title: 'Ticket updated',
+      })
+
       navigate(`/tickets/${ticketId}`, {
         replace: true,
         state: {
@@ -289,15 +297,26 @@ function EditTicketPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white">
-        <LoaderCircle
-          size={32}
-          className="animate-spin text-blue-600"
-        />
-
-        <p className="mt-4 text-sm font-semibold text-slate-700">
-          Loading ticket...
-        </p>
+      <div role="status" aria-label="Loading ticket editor" className="animate-pulse space-y-6">
+        <span className="sr-only">Loading ticket editor</span>
+        <div>
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="mt-4 h-9 w-72 max-w-full" />
+          <Skeleton className="mt-3 h-4 w-96 max-w-full" />
+        </div>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+          <Skeleton className="mt-5 h-44" />
+          <div className="mt-6 flex justify-end gap-3">
+            <Skeleton className="h-11 w-24" />
+            <Skeleton className="h-11 w-36" />
+          </div>
+        </section>
       </div>
     )
   }
